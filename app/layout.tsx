@@ -32,6 +32,19 @@ export default function RootLayout({
           <div className="flex min-h-dvh flex-1 flex-col bg-black">
             <Header />
             <div className="flex-1">{children}</div>
+            <footer className="border-t border-white/10 bg-black px-6 py-6">
+              <div className="mx-auto flex max-w-6xl items-center justify-between text-xs text-zinc-400">
+                <div>© {new Date().getFullYear()} Syllab.ai</div>
+                <div className="flex items-center gap-6">
+                  <a href="#" className="hover:text-zinc-50">
+                    Privacy
+                  </a>
+                  <a href="#" className="hover:text-zinc-50">
+                    Terms
+                  </a>
+                </div>
+              </div>
+            </footer>
           </div>
         </div>
       </body>

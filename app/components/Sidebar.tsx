@@ -20,8 +20,8 @@ export default async function Sidebar() {
         </button>
 
         {session ? (
-          <button
-            type="button"
+          <Link
+            href="/classes/new"
             aria-label="Add class"
             title="Create class"
             className="group mt-4 inline-flex h-12 w-12 items-center justify-center rounded-xl bg-cyan-300/10 text-cyan-200 ring-1 ring-cyan-300/20 shadow-[0_0_0_1px_rgba(34,211,238,0.12)] transition hover:bg-cyan-300/15 hover:text-cyan-100"
@@ -29,7 +29,7 @@ export default async function Sidebar() {
             <span aria-hidden className="text-2xl leading-none">
               +
             </span>
-          </button>
+          </Link>
         ) : (
           <Link
             href="/signin"

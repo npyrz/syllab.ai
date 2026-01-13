@@ -5,7 +5,7 @@ import { auth } from "@/auth";
 export default async function Home() {
   const session = await auth();
 
-  const href = session ? "/home" : "/signin?callbackUrl=%2Fhome";
+  const href = session ? "/classes/new" : "/signin?callbackUrl=%2Fclasses%2Fnew";
 
   return (
     <div className="relative min-h-[calc(100vh-64px)] overflow-hidden bg-black">
