@@ -1,6 +1,11 @@
 import Link from "next/link";
 
-export default function Header() {
+import { auth } from "@/auth";
+import ProfileMenu from "@/app/components/ProfileMenu";
+
+export default async function Header() {
+  const session = await auth();
+
   return (
     <header className="sticky top-0 z-50 w-full bg-black">
       <div className="flex h-16 w-full items-center px-4 sm:px-6">
@@ -17,12 +22,16 @@ export default function Header() {
             </a>
           </div>
 
-          <a
-            href="#"
-            className="inline-flex items-center rounded-xl bg-cyan-300 px-4 py-2 text-sm font-semibold text-black shadow-[0_0_0_1px_rgba(34,211,238,0.25),0_10px_30px_rgba(34,211,238,0.16)] transition hover:bg-cyan-200"
-          >
-            Sign in
-          </a>
+          {session ? (
+            <ProfileMenu user={session.user} />
+          ) : (
+            <Link
+              href="/signin"
+              className="inline-flex items-center rounded-xl bg-cyan-300 px-4 py-2 text-sm font-semibold text-black shadow-[0_0_0_1px_rgba(34,211,238,0.25),0_10px_30px_rgba(34,211,238,0.16)] transition hover:bg-cyan-200"
+            >
+              Sign in
+            </Link>
+          )}
         </div>
       </div>
     </header>

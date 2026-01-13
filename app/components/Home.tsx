@@ -1,4 +1,12 @@
-export default function Home() {
+import Link from "next/link";
+
+import { auth } from "@/auth";
+
+export default async function Home() {
+  const session = await auth();
+
+  const href = session ? "/home" : "/signin?callbackUrl=%2Fhome";
+
   return (
     <div className="relative min-h-[calc(100vh-64px)] overflow-hidden bg-black">
       <div className="pointer-events-none absolute inset-0">
@@ -36,13 +44,13 @@ export default function Home() {
           </p>
 
           <div className="mt-10 flex flex-col items-center gap-3 sm:flex-row md:items-start">
-            <a
-              href="#"
+            <Link
+              href={href}
               className="group inline-flex w-full items-center justify-center rounded-xl bg-cyan-300 px-5 py-3 text-sm font-semibold text-black shadow-[0_0_0_1px_rgba(34,211,238,0.25),0_14px_40px_rgba(34,211,238,0.22)] transition hover:bg-cyan-200 sm:w-auto"
             >
               Upload your first syllabus
               <span className="ml-2 transition-transform group-hover:translate-x-0.5">→</span>
-            </a>
+            </Link>
 
           </div>
 

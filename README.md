@@ -1,36 +1,65 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# syllab.ai
+
+## Current Features
+
+- Marketing-style home UI with persistent sidebar + header layout
+- Routes:
+	- `/` (renders the main `Home` component)
+	- `/home` (currently renders the same `Home` component)
+- Backend API (stub): `GET`/`POST` at `/api/classes`
+	- `GET /api/classes` returns `{ classes: [] }`
+	- `POST /api/classes` echoes the JSON payload
 
 ## Getting Started
 
-First, run the development server:
-
 ```bash
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open http://localhost:3000
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Filesystem Guide
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+This repo uses the Next.js **App Router**, so both UI routes and API routes live under `app/`.
 
-## Learn More
+### Frontend (UI)
 
-To learn more about Next.js, take a look at the following resources:
+- `app/layout.tsx`
+	- Root layout (fonts, global styles, app shell)
+	- Renders persistent UI chrome: `Sidebar` + `Header`
+- `app/page.tsx`
+	- `/` route
+- `app/home/page.tsx`
+	- `/home` route (currently the same content as `/`)
+- `app/components/*`
+	- Reusable UI components used by routes/layout (e.g. `Header`, `Sidebar`, `Home`)
+- `app/globals.css`
+	- Tailwind import + global theme variables
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+### Backend (API)
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+- `app/api/*/route.ts`
+	- Next.js Route Handlers (server-side endpoints)
+	- Example: `app/api/classes/route.ts` maps to `/api/classes`
 
-## Deploy on Vercel
+Typical pattern as the backend grows:
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+- Keep request/response handling in `app/api/.../route.ts`
+- Move business logic into plain TypeScript modules (e.g. `src/server/*` or `src/lib/*`), then import those from the route handlers
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+### Future Database Layer (recommended shape)
+
+There is no database wired up yet. When you add one, a clean Next.js-friendly structure is:
+
+- `prisma/schema.prisma` (if using Prisma)
+- `src/db/client.ts` (singleton DB client)
+- `src/db/migrations/*` (if your tooling uses migrations)
+
+Then API routes call into `src/db/*` via a service layer rather than talking to the database directly.
+
+## Scripts
+
+- `npm run dev` — start dev server
+- `npm run lint` — run ESLint
+- `npm run build` — production build
