@@ -2,11 +2,21 @@
 
 ## Current Features
 
-- Marketing-style home UI with persistent sidebar + header layout
-- Routes:
-	- `/` (renders the main `Home` component)
-	- `/home` (currently renders the same `Home` component)
-- Backend API (stub): `GET`/`POST` at `/api/classes`
+- **Authentication System**
+	- Email/password signup at `/signup` with username, name (optional), email, and password
+	- Sign-in at `/signin` supporting both credentials and Google OAuth
+	- Persistent sessions with NextAuth
+	- Auto-generated usernames for OAuth users
+- **UI Layout**
+	- Marketing-style home UI with persistent sidebar + header layout
+	- Protected routes with authentication checks
+- **Routes**
+	- `/` - Landing page (Home component)
+	- `/home` - User dashboard (same Home component)
+	- `/signin` - Sign-in page
+	- `/signup` - Sign-up page
+	- `/classes/new` - Create new class
+- **Backend API** (stub): `GET`/`POST` at `/api/classes`
 	- `GET /api/classes` returns `{ classes: [] }`
 	- `POST /api/classes` echoes the JSON payload
 
@@ -18,6 +28,47 @@ npm run dev
 ```
 
 Open http://localhost:3000
+
+## Auth + Database
+
+This project uses:
+
+- NextAuth (custom sign-in UI at `/signin`, `/signup`)
+- Prisma 7 + PostgreSQL (`DATABASE_URL` configured in `prisma.config.ts`)
+
+### Environment variables
+
+Add these to `.env.local`:
+
+- `AUTH_SECRET`
+- `DATABASE_URL`
+- `AUTH_GOOGLE_ID` (optional, enables Google login)
+- `AUTH_GOOGLE_SECRET` (optional, enables Google login)
+
+### Prisma
+
+```bash
+npx prisma migrate dev
+npx prisma generate
+npx prisma studio  # View/edit database with GUI
+```
+
+### User Model
+
+Each user has:
+- `username` (required, unique) - auto-generated from email for OAuth users, manually set during signup
+- `email` (required, unique)
+- `name` (optional)
+- `passwordHash` (for credentials auth)
+- `provider` (tracks sign-in method: "credentials" or "google")
+- `lastLoginAt`, `lastSeenAt` timestamps
+
+### User storage behavior
+
+- **Email/password signup** (`/signup`): creates a `User` with username, email, name (optional), and hashed password
+- **OAuth sign-in** (Google): auto-generates username from email (e.g., `user@example.com` → `user`), ensures uniqueness by appending numbers if needed
+- **Credentials sign-in** (`/signin`): authenticates against stored passwordHash
+- All sign-ins update `lastLoginAt` and `lastSeenAt` timestamps
 
 ## Filesystem Guide
 
@@ -40,7 +91,13 @@ This repo uses the Next.js **App Router**, so both UI routes and API routes live
 ### Backend (API)
 
 - `app/api/*/route.ts`
-	- Next.js Route Handlers (server-side endpoints)
+- **Prisma 7** configuration:
+	- Schema: `prisma/schema.prisma`
+	- Config: `prisma.config.ts` (datasource URL configuration)
+	- Migrations: `prisma/migrations/`
+- **Models**:
+	- `User`: username (unique), email (unique), name, passwordHash, provider, timestamps
+	- `Post`: (example model, not currently used)ts)
 	- Example: `app/api/classes/route.ts` maps to `/api/classes`
 
 Typical pattern as the backend grows:
@@ -48,21 +105,18 @@ Typical pattern as the backend grows:
 - Keep request/response handling in `app/api/.../route.ts`
 - Move business logic into plain TypeScript modules (e.g. `src/server/*` or `src/lib/*`), then import those from the route handlers
 
-### Future Database Layer (recommended shape)
+### Database Layer
 
-There is no database wired up yet. When you add one, a clean Next.js-friendly structure is:
-
-- `prisma/schema.prisma` (if using Prisma)
-- `src/db/client.ts` (singleton DB client)
-- `src/db/migrations/*` (if your tooling uses migrations)
-
-Then API routes call into `src/db/*` via a service layer rather than talking to the database directly.
+Prisma schema lives in `prisma/schema.prisma`.
 
 ## Scripts
 
 - `npm run dev` — start dev server
 - `npm run lint` — run ESLint
 - `npm run build` — production build
+- `npm run prisma:migrate` — run Prisma migrations (dev)
+- `npm run prisma:generate` — generate Prisma client
+- `npm run prisma:studio` — open Prisma Studio
 
 
 ## Ideas & Notes
@@ -74,20 +128,15 @@ Then API routes call into `src/db/*` via a service layer rather than talking to 
 - ADD CLASS
 - UPLOAD DOCUMENTS TO CLASS
 - AI TRAINS OF THAT INFORMATION AND IT PRODUCES POPULAR INFO ABOUT UR CLASS AND WE JUST SCAN THE DOCUMENTS AND FIND FROM KEY WORDS
-- IN FUTURE CREATE OUR OWN MODEL TO DO THIS
-- CHAT FEATURE TO ASK ABOUT DOCUMENTS UPLOADED
-- NOTES FEATURE THAT YOU CAN UPLOAD LECTURE NOTES AND GET SUMMARY, VIDEO, OR LESSON
--  BE ABLE TO SAVE NOTES
-- MAKE IT CLEAR IT WONT SOLVE HOMEWORK PROBELSM AND STUDENTS SHOULD LEARN
+- IN FUTURE CREATE OUR OWN MODEL TO DO THIS???
+- STORE CLASSES PER USER
+- WORK ON .TXT TRANSFER OF DOCUMEEWORK PROBELSM AND STUDENTS SHOULD LEARN
 
 ## PLAN AND TODO
-- ADD DB
-- STORE LOGIN AND AUTH IN DB
 - STORE CLASSES PER USER
 - WORK ON .TXT TRANSFER OF DOCUEMNTS
 - GET AWS SYSTEM FOR FILE STORAGE
 - BEGIN RESEARCH ON AI CONNECTION
-
 
 ## UPLOAD SYSTEM
 1) User uploads a document

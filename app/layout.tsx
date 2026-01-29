@@ -3,6 +3,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import Header from "./components/Header";
 import Sidebar from "./components/Sidebar";
+import LastSeenPing from "./components/LastSeenPing";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -27,6 +28,7 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
+        <LastSeenPing />
         <div className="flex min-h-dvh w-full">
           <Sidebar />
           <div className="flex min-h-dvh flex-1 flex-col bg-black">

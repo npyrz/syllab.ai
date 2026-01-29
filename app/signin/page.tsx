@@ -1,4 +1,5 @@
 import { auth, signIn } from "@/auth";
+import Link from "next/link";
 import { redirect } from "next/navigation";
 
 type SignInPageProps = {
@@ -14,8 +15,6 @@ export default async function SignInPage({ searchParams }: SignInPageProps) {
   const callbackUrl = sp.callbackUrl ?? "/";
   if (session) redirect(callbackUrl);
 
-  const githubConfigured =
-    !!process.env.AUTH_GITHUB_ID && !!process.env.AUTH_GITHUB_SECRET;
   const googleConfigured =
     !!process.env.AUTH_GOOGLE_ID && !!process.env.AUTH_GOOGLE_SECRET;
 
@@ -36,12 +35,6 @@ export default async function SignInPage({ searchParams }: SignInPageProps) {
             </div>
           ) : null}
 
-          {!githubConfigured && !googleConfigured ? (
-            <div className="mt-5 rounded-2xl bg-black/30 p-4 text-sm text-zinc-300 ring-1 ring-white/10">
-              No login providers are configured yet. Add GitHub and/or Google credentials to <span className="text-zinc-50">.env.local</span>.
-            </div>
-          ) : null}
-
           <div className="mt-6 flex flex-col gap-3">
             <form
               action={async () => {
@@ -58,20 +51,68 @@ export default async function SignInPage({ searchParams }: SignInPageProps) {
               </button>
             </form>
 
+            <div className="my-2 flex items-center gap-3">
+              <div className="h-px flex-1 bg-white/10" />
+              <div className="text-xs text-zinc-400">or</div>
+              <div className="h-px flex-1 bg-white/10" />
+            </div>
+
             <form
-              action={async () => {
+              action={async (formData) => {
                 "use server";
-                await signIn("github", { redirectTo: callbackUrl });
+                const email = String(formData.get("email") ?? "")
+                  .trim()
+                  .toLowerCase();
+                const password = String(formData.get("password") ?? "");
+                await signIn("credentials", {
+                  email,
+                  password,
+                  redirectTo: callbackUrl,
+                });
               }}
+              className="flex flex-col gap-3"
             >
+              <label className="flex flex-col gap-1">
+                <span className="text-xs text-zinc-400">Email</span>
+                <input
+                  name="email"
+                  type="email"
+                  required
+                  autoComplete="email"
+                  className="h-11 rounded-xl bg-black/30 px-4 text-sm text-zinc-100 ring-1 ring-white/10 placeholder:text-zinc-500 focus:outline-none focus:ring-white/20"
+                  placeholder="you@example.com"
+                />
+              </label>
+
+              <label className="flex flex-col gap-1">
+                <span className="text-xs text-zinc-400">Password</span>
+                <input
+                  name="password"
+                  type="password"
+                  required
+                  autoComplete="current-password"
+                  className="h-11 rounded-xl bg-black/30 px-4 text-sm text-zinc-100 ring-1 ring-white/10 placeholder:text-zinc-500 focus:outline-none focus:ring-white/20"
+                  placeholder="••••••••"
+                />
+              </label>
+
               <button
                 type="submit"
-                disabled={!githubConfigured}
-                className="inline-flex w-full items-center justify-center rounded-xl bg-cyan-300 px-5 py-3 text-sm font-semibold text-black shadow-[0_0_0_1px_rgba(34,211,238,0.25),0_14px_40px_rgba(34,211,238,0.22)] transition hover:bg-cyan-200 disabled:cursor-not-allowed disabled:opacity-60"
+                className="inline-flex w-full items-center justify-center rounded-xl bg-cyan-300 px-5 py-3 text-sm font-semibold text-black shadow-[0_0_0_1px_rgba(34,211,238,0.25),0_14px_40px_rgba(34,211,238,0.22)] transition hover:bg-cyan-200"
               >
-                Continue with GitHub
+                Sign in
               </button>
             </form>
+
+            <div className="pt-1 text-center text-sm text-zinc-400">
+              Don’t have an account?{" "}
+              <Link
+                href={`/signup?callbackUrl=${encodeURIComponent(callbackUrl)}`}
+                className="text-zinc-100 hover:underline"
+              >
+                Sign up
+              </Link>
+            </div>
           </div>
         </section>
       </main>
