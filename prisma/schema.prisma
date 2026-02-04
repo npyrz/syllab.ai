@@ -12,21 +12,53 @@ model User {
   username     String    @unique
   email        String    @unique
   name         String?
-  image        String?
   passwordHash String?
   provider     String?
   lastLoginAt  DateTime?
   lastSeenAt   DateTime?
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
-  posts        Post[]
+  classes      Class[]
+  documents    Document[]
 }
 
-model Post {
-  id        String  @id @default(cuid())
-  title     String
-  content   String?
-  published Boolean @default(false)
-  authorId  String
-  author    User    @relation(fields: [authorId], references: [id])
+model Class {
+  id          String     @id @default(cuid())
+  userId      String
+  title       String
+  description String?
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+  user        User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  documents   Document[]
+
+  @@index([userId])
+}
+
+model Document {
+  id           String          @id @default(cuid())
+  classId      String
+  userId       String
+  filename     String
+  mimeType     String
+  sizeBytes    Int
+  storageKey   String
+  status       DocumentStatus  @default(pending)
+  textExtracted String?
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
+  processedAt  DateTime?
+  user         User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  class        Class           @relation(fields: [classId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([classId])
+  @@index([status])
+}
+
+enum DocumentStatus {
+  pending
+  processing
+  done
+  failed
 }

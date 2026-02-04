@@ -23,11 +23,13 @@ Non-goals (current scope):
 - NextAuth-based auth handler with DB-backed user records
 
 **Database (PostgreSQL + Prisma)**
-- User persistence and future class/document records
+- User persistence and class/document records
 
 **External Services**
 - Google OAuth (optional)
-- Future: Object storage (S3/R2) and document processing workers
+- Object storage (S3/R2/GCS)
+- Document processing workers (background)
+- Groq API (LLM)
 
 ```
 Browser
@@ -66,7 +68,7 @@ Browser
 - Session includes the `user.id` persisted from the DB.
 - API routes enforce auth by calling `auth()` and checking session.
 
-## 6) Data Model (Current)
+## 6) Data Model (Updated)
 **User**
 - `id` (cuid)
 - `username` (unique)
@@ -75,8 +77,28 @@ Browser
 - `provider`, `lastLoginAt`, `lastSeenAt`
 - `createdAt`, `updatedAt`
 
-**Post** (example)
-- Not currently used by application logic.
+**Class**
+- `id` (cuid)
+- `userId` (FK -> User)
+- `title`
+- `description?`
+- `createdAt`, `updatedAt`
+
+**Document**
+- `id` (cuid)
+- `classId` (FK -> Class)
+- `userId` (FK -> User)
+- `filename`, `mimeType`, `sizeBytes`
+- `storageKey` (object storage key)
+- `status` (`pending` | `processing` | `done` | `failed`)
+- `textExtracted` (nullable, stored cleaned text)
+- `createdAt`, `updatedAt`, `processedAt?`
+
+**Upload** (optional helper)
+- `id` (cuid)
+- `documentId` (FK -> Document)
+- `status` (`pending` | `processing` | `done` | `failed`)
+- `createdAt`, `updatedAt`
 
 ## 7) Key Flows
 ### 7.1 Sign-in (Credentials)
@@ -95,28 +117,32 @@ Browser
 2. Client submits JSON to `POST /api/classes`.
 3. API currently echoes payload and redirects user to `/home`.
 
-## 8) Planned Document Ingestion (Target Design)
-A future pipeline is planned to accept uploaded files, extract text, and store derived data.
+## 8) Document Ingestion & Processing (Updated Plan)
+The pipeline accepts uploads, extracts text, and stores cleaned content for AI use.
 
 Proposed high-level workflow:
-1. Client uploads files to API route or directly to object storage.
-2. API creates an `Upload` record with `pending` status.
-3. Background worker extracts text (PDF, DOCX, OCR for images).
-4. Text is cleaned, chunked, and stored (DB or vector DB later).
-5. Original file is deleted after processing or after a TTL.
-6. Client polls for `processing` → `done` status and surfaces insights.
+1. Client requests a presigned upload URL from the API.
+2. Client uploads file directly to object storage.
+3. API creates a `Document` record with `pending` status (and optional `Upload`).
+4. Background worker pulls the object, extracts text (PDF, DOCX, OCR for images).
+5. Cleaned text is stored in `Document.textExtracted` (or a separate table later).
+6. Status transitions: `pending` → `processing` → `done` (or `failed`).
+7. Optionally delete the original file after processing or keep with TTL.
 
 ## 9) Security & Privacy
 - Authentication required for API access.
+- Authorization enforced on every Class/Document access (`userId` ownership).
 - Passwords stored as hashes only.
 - OAuth secrets and database URL stored in environment variables.
-- Future file processing should minimize retention of original files.
+- Object storage credentials server-side only.
+- File processing should minimize retention of originals; consider TTL deletes.
+- AI requests use cleaned text only; never send secrets or raw files.
 
 ## 10) Scalability Considerations
 - API routes are stateless and can scale horizontally.
 - Document processing should move to background workers to avoid request timeouts.
-- Object storage recommended for large uploads in production.
-- Database indexing on `User.email`, `User.username` already in place.
+- Object storage required for large uploads in production.
+- Database indexing on `User.email`, `User.username` plus FKs (`userId`, `classId`).
 
 ## 11) Observability (Recommended)
 - Structured logging for API and auth events.
@@ -129,11 +155,11 @@ Proposed high-level workflow:
 - Environment variables: `AUTH_SECRET`, `DATABASE_URL`, `AUTH_GOOGLE_ID`, `AUTH_GOOGLE_SECRET`.
 
 ## 13) Known Gaps / Next Steps
-- Implement classes and document models in Prisma.
-- Build upload API and ingestion pipeline.
+- Implement Class/Document models in Prisma.
+- Build presigned upload API and ingestion pipeline.
 - Add background job system (e.g., BullMQ, Cloud Tasks, or serverless workers).
-- Introduce document search and AI summarization.
+- Add Groq API integration for class-level summaries using cleaned text.
 
 ---
 
-**Document status:** Initial system design aligned to current repo structure and intended roadmap (February 2, 2026).
+**Document status:** Initial system design aligned to current repo structure and intended roadmap (February 4, 2026).

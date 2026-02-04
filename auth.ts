@@ -42,7 +42,6 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
 					id: user.id,
 					email: user.email,
 					name: user.name,
-					image: user.image,
 				};
 			},
 		}),
@@ -55,14 +54,12 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
 			if (user) {
 				token.name = user.name;
 				token.email = user.email;
-				token.picture = user.image;
 			}
 
 			// Only touch the DB on actual sign-in (account present), not on every token refresh.
 			if (account && token.email) {
 				const email = String(token.email).toLowerCase();
 				const name = token.name ? String(token.name) : null;
-				const image = token.picture ? String(token.picture) : null;
 				const now = new Date();
 
 				// Check if user exists
@@ -74,7 +71,6 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
 						where: { email },
 						data: {
 							name,
-							image,
 							provider: account.provider,
 							lastLoginAt: now,
 							lastSeenAt: now,
@@ -103,7 +99,6 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
 							username,
 							email,
 							name,
-							image,
 							provider: account.provider,
 							lastLoginAt: now,
 							lastSeenAt: now,

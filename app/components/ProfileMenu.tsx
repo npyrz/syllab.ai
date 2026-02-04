@@ -8,7 +8,6 @@ type ProfileMenuProps = {
   user?: {
     name?: string | null;
     email?: string | null;
-    image?: string | null;
   };
 };
 
@@ -55,14 +54,9 @@ export default function ProfileMenu({ user }: ProfileMenuProps) {
         className="inline-flex h-10 w-10 items-center justify-center overflow-hidden rounded-full ring-1 ring-white/10 transition hover:ring-white/20"
         title={title}
       >
-        {user?.image ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={user.image} alt="Profile" className="h-full w-full object-cover" />
-        ) : (
-          <span className="text-sm font-semibold text-zinc-200">
-            {getInitials(user?.name ?? user?.email)}
-          </span>
-        )}
+        <span className="text-sm font-semibold text-zinc-200">
+          {getInitials(user?.name ?? user?.email)}
+        </span>
       </button>
 
       {open ? (
@@ -82,18 +76,9 @@ export default function ProfileMenu({ user }: ProfileMenuProps) {
           >
             <div className="flex items-start gap-3">
               <div className="h-12 w-12 overflow-hidden rounded-full bg-black/30 ring-1 ring-white/10">
-                {user?.image ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    src={user.image}
-                    alt="Profile"
-                    className="h-full w-full object-cover"
-                  />
-                ) : (
-                  <div className="flex h-full w-full items-center justify-center text-sm font-semibold text-zinc-200">
-                    {getInitials(user?.name ?? user?.email)}
-                  </div>
-                )}
+                <div className="flex h-full w-full items-center justify-center text-sm font-semibold text-zinc-200">
+                  {getInitials(user?.name ?? user?.email)}
+                </div>
               </div>
 
               <div className="min-w-0">
