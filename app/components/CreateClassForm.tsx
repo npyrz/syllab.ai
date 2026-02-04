@@ -96,7 +96,6 @@ function Dropzone(props: {
 export default function CreateClassForm() {
   const [className, setClassName] = useState("");
   const [semester, setSemester] = useState("");
-  const [logo, setLogo] = useState<File | null>(null);
 
   const [syllabus, setSyllabus] = useState<FileBucket>({ files: [] });
   const [schedule, setSchedule] = useState<FileBucket>({ files: [] });
@@ -117,7 +116,6 @@ export default function CreateClassForm() {
           body: JSON.stringify({
             className,
             semester,
-            logoFileName: logo?.name ?? null,
             uploads: {
               syllabus: syllabus.files.map((f) => f.name),
               schedule: schedule.files.map((f) => f.name),
@@ -151,19 +149,6 @@ export default function CreateClassForm() {
             />
           </label>
         </div>
-
-        <label className="mt-4 block">
-          <div className="text-xs font-medium text-zinc-200">Logo (optional)</div>
-          <input
-            type="file"
-            accept="image/*"
-            onChange={(e) => setLogo(e.target.files?.[0] ?? null)}
-            className="mt-2 block w-full rounded-2xl bg-black/30 px-4 py-3 text-sm text-zinc-300 ring-1 ring-white/10 file:mr-4 file:rounded-xl file:border-0 file:bg-white/10 file:px-4 file:py-2 file:text-xs file:font-semibold file:text-zinc-100 hover:file:bg-white/15"
-          />
-          <div className="mt-2 text-xs text-zinc-400">
-            {logo ? `Selected: ${logo.name}` : "No logo selected"}
-          </div>
-        </label>
       </div>
 
       <Dropzone
@@ -175,7 +160,7 @@ export default function CreateClassForm() {
       />
 
       <Dropzone
-        title="Upload schedule / calendar"
+        title="Upload schedule / calendar (optional)"
         helper="Drag and drop your schedule (PDF, image, etc.)"
         bucket={schedule}
         setBucket={setSchedule}
@@ -183,7 +168,7 @@ export default function CreateClassForm() {
       />
 
       <Dropzone
-        title="Upload misc documents"
+        title="Upload misc documents (optional)"
         helper="Any additional documents (handouts, policies, etc.)"
         bucket={misc}
         setBucket={setMisc}

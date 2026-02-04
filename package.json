@@ -25,12 +25,13 @@
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
+    "@types/bcryptjs": "^2.4.6",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9",
     "eslint-config-next": "16.1.1",
-    "prisma": "^7.3.0",
+    "prisma": "^6.19.2",
     "tailwindcss": "^4",
     "tsx": "^4.20.0",
     "typescript": "^5"

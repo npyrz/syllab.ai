@@ -27,10 +27,7 @@ export default async function Header() {
               FAQ
             </a>
             <a href="#" className="hover:text-zinc-50">
-              Billing
-            </a>
-            <a href="#" className="hover:text-zinc-50">
-              Support / Contact
+              Support
             </a>
             </div>
 
