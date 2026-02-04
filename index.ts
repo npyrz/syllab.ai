@@ -19,6 +19,7 @@ async function main() {
     data: {
       name: 'Alice',
       email: 'alice@prisma.io',
+      username: 'alice',
     },
   })
 
