@@ -9,16 +9,21 @@
 	- Auto-generated usernames for OAuth users
 - **UI Layout**
 	- Marketing-style home UI with persistent sidebar + header layout
+	- Authenticated home chat view with class buttons (no navigation)
+	- Class detail page with documents list + chat input
 	- Protected routes with authentication checks
 - **Routes**
 	- `/` - Landing page (Home component)
-	- `/home` - User dashboard (same Home component)
+	- `/home` - Authenticated chat-style home
 	- `/signin` - Sign-in page
 	- `/signup` - Sign-up page
 	- `/classes/new` - Create new class
-- **Backend API** (stub): `GET`/`POST` at `/api/classes`
-	- `GET /api/classes` returns `{ classes: [] }`
-	- `POST /api/classes` echoes the JSON payload
+	- `/classes/[id]` - Class details + documents list
+- **Backend API**: `GET`/`POST` at `/api/classes`, `GET`/`POST` at `/api/documents`
+	- `GET /api/classes` returns the user’s classes
+	- `POST /api/classes` creates a class
+	- `GET /api/documents` returns the user’s documents (optional class filter)
+	- `POST /api/documents` uploads a document and extracts text
 
 ## Getting Started
 
@@ -97,7 +102,8 @@ This repo uses the Next.js **App Router**, so both UI routes and API routes live
 	- Migrations: `prisma/migrations/`
 - **Models**:
 	- `User`: username (unique), email (unique), name, passwordHash, provider, timestamps
-	- `Post`: (example model, not currently used)ts)
+	- `Class`: userId, title, description, timestamps
+	- `Document`: classId, userId, filename, mimeType, status, extracted text, timestamps
 	- Example: `app/api/classes/route.ts` maps to `/api/classes`
 
 Typical pattern as the backend grows:

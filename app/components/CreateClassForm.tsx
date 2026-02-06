@@ -101,7 +101,10 @@ export default function CreateClassForm() {
   const [schedule, setSchedule] = useState<FileBucket>({ files: [] });
   const [misc, setMisc] = useState<FileBucket>({ files: [] });
 
-  const canSubmit = className.trim().length > 0 && semester.trim().length > 0;
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const canSubmit = className.trim().length > 0 && semester.trim().length > 0 && !isSubmitting;
 
   return (
     <form
@@ -110,21 +113,59 @@ export default function CreateClassForm() {
         e.preventDefault();
         if (!canSubmit) return;
 
-        await fetch("/api/classes", {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({
-            className,
-            semester,
-            uploads: {
-              syllabus: syllabus.files.map((f) => f.name),
-              schedule: schedule.files.map((f) => f.name),
-              misc: misc.files.map((f) => f.name),
-            },
-          }),
-        });
+        setIsSubmitting(true);
+        setError(null);
 
-        window.location.href = "/home";
+        try {
+          // Step 1: Create the class
+          const classResponse = await fetch("/api/classes", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({
+              title: className,
+              description: semester,
+            }),
+          });
+
+          if (!classResponse.ok) {
+            const errorData = await classResponse.json();
+            throw new Error(errorData.error || "Failed to create class");
+          }
+
+          const { class: newClass } = await classResponse.json();
+          const classId = newClass.id;
+
+          // Step 2: Upload all files
+          const allFiles = [
+            ...syllabus.files,
+            ...schedule.files,
+            ...misc.files,
+          ];
+
+          for (const file of allFiles) {
+            const formData = new FormData();
+            formData.append("file", file);
+            formData.append("classId", classId);
+
+            const uploadResponse = await fetch("/api/documents", {
+              method: "POST",
+              body: formData,
+            });
+
+            if (!uploadResponse.ok) {
+              const errorData = await uploadResponse.json();
+              console.error(`Failed to upload ${file.name}:`, errorData);
+              // Continue with other files even if one fails
+            }
+          }
+
+          // Step 3: Redirect to home
+          window.location.href = "/home";
+        } catch (err) {
+          console.error("Error creating class:", err);
+          setError(err instanceof Error ? err.message : "Failed to create class");
+          setIsSubmitting(false);
+        }
       }}
     >
       <div className="rounded-3xl bg-white/6 p-6 ring-1 ring-white/10 backdrop-blur-xl">
@@ -154,6 +195,7 @@ export default function CreateClassForm() {
       <Dropzone
         title="Upload syllabus"
         helper="Drag and drop your syllabus (PDF, DOCX, etc.)"
+        accept=".pdf,.docx,.doc"
         bucket={syllabus}
         setBucket={setSyllabus}
         multiple={false}
@@ -162,6 +204,7 @@ export default function CreateClassForm() {
       <Dropzone
         title="Upload schedule / calendar (optional)"
         helper="Drag and drop your schedule (PDF, image, etc.)"
+        accept=".pdf,.docx,.doc"
         bucket={schedule}
         setBucket={setSchedule}
         multiple={false}
@@ -170,6 +213,7 @@ export default function CreateClassForm() {
       <Dropzone
         title="Upload misc documents (optional)"
         helper="Any additional documents (handouts, policies, etc.)"
+        accept=".pdf,.docx,.doc"
         bucket={misc}
         setBucket={setMisc}
         multiple
@@ -183,12 +227,19 @@ export default function CreateClassForm() {
         </p>
       </div>
 
+      {error && (
+        <div className="rounded-3xl bg-red-500/10 p-5 text-xs text-red-300 ring-1 ring-red-500/20 backdrop-blur-xl">
+          <div className="text-xs font-medium">Error</div>
+          <p className="mt-2 leading-5">{error}</p>
+        </div>
+      )}
+
       <button
         type="submit"
         disabled={!canSubmit}
         className="inline-flex w-full items-center justify-center rounded-xl bg-cyan-300 px-5 py-3 text-sm font-semibold text-black shadow-[0_0_0_1px_rgba(34,211,238,0.25),0_14px_40px_rgba(34,211,238,0.22)] transition hover:bg-cyan-200 disabled:cursor-not-allowed disabled:opacity-60"
       >
-        Create class
+        {isSubmitting ? "Creating class..." : "Create class"}
       </button>
     </form>
   );

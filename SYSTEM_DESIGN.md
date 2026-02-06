@@ -47,15 +47,18 @@ Browser
 ### 4.1 Frontend
 - Root layout and shared shell (sidebar + header).
 - Routes:
-  - `/` and `/home` (landing + dashboard UI)
+  - `/` (landing)
+  - `/home` (authenticated chat-style home)
   - `/signin`, `/signup` (custom auth UI)
   - `/classes/new` (class creation form)
+  - `/classes/[id]` (class details + documents list + chat input)
 - Key components:
   - `CreateClassForm` (client form, file selection, post to API)
 
 ### 4.2 Backend
 - Auth handler at `app/api/auth/[...nextauth]/route.ts` via `auth.ts` configuration.
 - Classes API at `app/api/classes/route.ts` (authenticated `GET` and `POST`).
+- Documents API at `app/api/documents/route.ts` (authenticated `GET` and `POST`).
 
 ### 4.3 Data Layer
 - Prisma schema in `prisma/schema.prisma`.
@@ -117,17 +120,18 @@ Browser
 ### 7.3 Create Class (Current Stub)
 1. User fills out `/classes/new` and selects files.
 2. Client submits JSON to `POST /api/classes`.
-3. API currently echoes payload and redirects user to `/home`.
+3. Client uploads selected files to `POST /api/documents` with `classId`.
+4. API stores files, extracts text, and updates document status.
 
 ## 8) Document Ingestion & Processing Pipeline
 **Core Principle:** Extract text, link to user, serve context-specific AI responses.
 
 High-level workflow:
 1. **Upload**: User uploads document to `POST /api/documents` (authenticated).
-2. **Store**: API creates `Document` record with `status: pending` and saves file to object storage with `storageKey`.
+2. **Store**: API creates `Document` record with `status: pending` and saves file to local `uploads/` with `storageKey`.
 3. **Extract** (background worker):
-  - Pull file from storage.
-  - Extract text (PDF, DOCX via `pdf-parse`, `docx` libraries or call external service).
+  - Read file from `uploads/`.
+  - Extract text (PDF via `pdfjs-dist`, DOCX via `mammoth`).
   - Clean/normalize text (remove headers, footers, extra whitespace).
   - Store in `Document.textExtracted`.
   - Update `status: done` or `status: failed`.

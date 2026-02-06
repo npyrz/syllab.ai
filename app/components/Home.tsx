@@ -1,11 +1,24 @@
 import Link from "next/link";
 
 import { auth } from "@/auth";
+import { prisma } from "@/lib/prisma";
+import HomeChat from "@/app/components/HomeChat";
 
 export default async function Home() {
   const session = await auth();
+  const classes = session?.user?.id
+    ? await prisma.class.findMany({
+        where: { userId: session.user.id },
+        orderBy: { createdAt: "desc" },
+        select: { id: true, title: true },
+      })
+    : [];
 
   const href = session ? "/classes/new" : "/signin?callbackUrl=%2Fclasses%2Fnew";
+
+  if (session?.user?.id && classes.length > 0) {
+    return <HomeChat classes={classes} />;
+  }
 
   return (
     <div className="relative min-h-[calc(100vh-64px)] overflow-hidden bg-black">

@@ -48,6 +48,9 @@ yarn-error.log*
 # turbo
 .turbo/
 
+# uploads
+/uploads/
+
 # vercel
 .vercel
 
