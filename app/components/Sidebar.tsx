@@ -3,6 +3,11 @@ import Link from "next/link";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 
+type SidebarClass = {
+  id: string;
+  title: string;
+};
+
 function getInitials(title: string) {
   const words = title.trim().split(/\s+/).filter(Boolean);
   const initials = words.slice(0, 2).map((word) => word[0]?.toUpperCase());
@@ -11,7 +16,7 @@ function getInitials(title: string) {
 
 export default async function Sidebar() {
   const session = await auth();
-  const classes = session?.user?.id
+  const classes: SidebarClass[] = session?.user?.id
     ? await prisma.class.findMany({
         where: { userId: session.user.id },
         orderBy: { createdAt: "desc" },
@@ -48,7 +53,7 @@ export default async function Sidebar() {
 
         {classes.length ? (
           <div className="mt-4 flex w-full flex-col items-center gap-2">
-            {classes.map((course) => (
+            {classes.map((course: SidebarClass) => (
               <Link
                 key={course.id}
                 href={`/classes/${course.id}`}
