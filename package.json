@@ -16,6 +16,7 @@
   "dependencies": {
     "@prisma/adapter-pg": "^6.1.0",
     "@prisma/client": "^7.3.0",
+    "@vercel/blob": "^0.23.4",
     "bcryptjs": "^2.4.3",
     "dotenv": "^16.4.7",
     "mammoth": "^1.11.0",

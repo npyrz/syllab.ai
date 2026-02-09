@@ -1,21 +1,18 @@
 import mammoth from 'mammoth';
-import { promises as fs } from 'fs';
 import path from 'path';
 import { pathToFileURL } from 'url';
 
 /**
  * Extract text from PDF or DOCX files
- * @param filePath - Full path to the file
+ * @param buffer - File contents
  * @param mimeType - MIME type of the file
  * @returns Extracted text content
  */
 export async function extractText(
-  filePath: string,
+  buffer: Buffer,
   mimeType: string
 ): Promise<string> {
   try {
-    const buffer = await fs.readFile(filePath);
-
     if (mimeType === 'application/pdf') {
       return await extractPdfText(buffer);
     }
