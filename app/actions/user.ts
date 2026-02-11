@@ -8,7 +8,8 @@ export async function touchLastSeenAction() {
   const userId = (session?.user as unknown as { id?: string } | undefined)?.id;
   if (!userId) return;
 
-  await prisma.user.update({
+  // Avoid throwing if the user record does not exist yet.
+  await prisma.user.updateMany({
     where: { id: userId },
     data: { lastSeenAt: new Date() },
   });

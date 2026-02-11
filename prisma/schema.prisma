@@ -41,7 +41,7 @@ model Document {
   filename     String
   mimeType     String
   sizeBytes    Int
-  storageKey   String
+  storageKey   String?
   status       DocumentStatus  @default(pending)
   textExtracted String?
   createdAt    DateTime        @default(now())

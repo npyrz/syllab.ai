@@ -45,6 +45,7 @@ export async function processDocument(documentId: string): Promise<void> {
       where: { id: documentId },
       data: {
         textExtracted: extractedText,
+        storageKey: null,
         status: 'done',
         processedAt: new Date(),
       },
