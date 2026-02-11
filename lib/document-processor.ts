@@ -26,6 +26,10 @@ export async function processDocument(documentId: string): Promise<void> {
 
     console.log(`[Worker] Extracting text from: ${document.filename}`);
 
+    if (!document.storageKey) {
+      throw new Error('Storage key is missing for this document');
+    }
+
     // Extract text from the blob
     const response = await fetch(document.storageKey);
     if (!response.ok) {
