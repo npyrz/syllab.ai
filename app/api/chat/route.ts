@@ -103,7 +103,7 @@ ${context}
       system: systemPrompt,
       prompt: message,
       temperature: 0.5,
-      maxCompletionTokens: 2048,
+      maxOutputTokens: 2048,
     });
 
     console.log(`[Chat] Generated response for class ${classId}`);
