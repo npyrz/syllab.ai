@@ -1,11 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/auth';
 import { prisma } from '@/lib/prisma';
-import { writeFile, mkdir } from 'fs/promises';
-import { join } from 'path';
+import { put } from '@vercel/blob';
 import { processDocument } from '@/lib/document-processor';
-
-const UPLOAD_DIR = join(process.cwd(), 'uploads');
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
 const ALLOWED_TYPES = [
   'application/pdf',
@@ -106,22 +103,20 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Ensure upload directory exists
-    await mkdir(UPLOAD_DIR, { recursive: true });
-
-    // Generate unique filename
+    // Generate unique blob name
     const timestamp = Date.now();
     const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
-    const uniqueFilename = `${timestamp}_${safeName}`;
-    const storageKey = `uploads/${uniqueFilename}`;
-    const filePath = join(process.cwd(), storageKey);
+    const blobName = `users/${session.user.id}/classes/${classId}/${timestamp}_${safeName}`;
 
-    // Save file to disk
+    // Upload to Vercel Blob
     const bytes = await file.arrayBuffer();
     const buffer = Buffer.from(bytes);
-    await writeFile(filePath, buffer);
+    const blob = await put(blobName, buffer, {
+      access: 'public',
+      contentType: file.type,
+    });
 
-    console.log(`[Upload] Saved file: ${filePath}`);
+    console.log(`[Upload] Stored blob: ${blob.url}`);
 
     // Create document record
     const document = await prisma.document.create({
@@ -131,7 +126,7 @@ export async function POST(req: NextRequest) {
         filename: file.name,
         mimeType: file.type,
         sizeBytes: file.size,
-        storageKey: storageKey,
+        storageKey: blob.url,
         status: 'pending',
       },
     });

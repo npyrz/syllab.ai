@@ -7,9 +7,9 @@
 	- Sign-in at `/signin` supporting both credentials and Google OAuth
 	- Persistent sessions with NextAuth
 	- Auto-generated usernames for OAuth users
-- **UI Layout**
+-- **UI Layout**
 	- Marketing-style home UI with persistent sidebar + header layout
-	- Authenticated home chat view with class buttons (no navigation)
+	- Authenticated home chat view with class buttons
 	- Class detail page with documents list + chat input
 	- Protected routes with authentication checks
 - **Routes**
@@ -19,11 +19,12 @@
 	- `/signup` - Sign-up page
 	- `/classes/new` - Create new class
 	- `/classes/[id]` - Class details + documents list
-- **Backend API**: `GET`/`POST` at `/api/classes`, `GET`/`POST` at `/api/documents`
+-- **Backend API**: `GET`/`POST` at `/api/classes`, `GET`/`POST` at `/api/documents`, `POST` at `/api/chat`
 	- `GET /api/classes` returns the user’s classes
 	- `POST /api/classes` creates a class
 	- `GET /api/documents` returns the user’s documents (optional class filter)
-	- `POST /api/documents` uploads a document and extracts text
+	- `POST /api/documents` uploads a document to Vercel Blob and extracts text
+	- `POST /api/chat` answers questions using only extracted class documents
 
 ## Getting Started
 
@@ -49,6 +50,7 @@ Add these to `.env.local`:
 - `DATABASE_URL`
 - `AUTH_GOOGLE_ID` (optional, enables Google login)
 - `AUTH_GOOGLE_SECRET` (optional, enables Google login)
+- `GROQ_API_KEY` (Groq model access)
 
 ### Prisma
 
@@ -103,7 +105,7 @@ This repo uses the Next.js **App Router**, so both UI routes and API routes live
 - **Models**:
 	- `User`: username (unique), email (unique), name, passwordHash, provider, timestamps
 	- `Class`: userId, title, description, timestamps
-	- `Document`: classId, userId, filename, mimeType, status, extracted text, timestamps
+	- `Document`: classId, userId, filename, mimeType, size, status, extracted text, storage key (nullable)
 	- Example: `app/api/classes/route.ts` maps to `/api/classes`
 
 Typical pattern as the backend grows:
@@ -125,99 +127,18 @@ Prisma schema lives in `prisma/schema.prisma`.
 - `npm run prisma:studio` — open Prisma Studio
 
 
-## Ideas & Notes
-- For updates just have it as a popup notication
-- https://www.cookiebot.com/us/privacy-policy-generator/?trc_gcmp_id=23257159802&trc_gag_id=188256882869&trc_gad_id=783888474695&utm_source=google&utm_medium=cpc&utm_campaign=cb_src_us_en_generic_mof_cmp&utm_content=us_ppg_exact&utm_term={searchterm}&utm_device=c&gad_source=1&gad_campaignid=23257159802&gbraid=0AAAAABYXPmVW_IMv_Nx6BbAg3IzQU2AX3&gclid=Cj0KCQiA1JLLBhCDARIsAAVfy7jGQnvzMMbF3uywp3_285hNEz2ArxEtGtWcgFtVHlaK7CLQ22j7Dp0aAtmYEALw_wcB 
+## Game Plan
+- Improve chat responses (TL;DR, details, sources, clean formatting)
+- UI fixes for classes
+- Manage documents on the class tab
+- Upload lecture slides and materials to create study material
+- Update class view to show upcoming assignments and this-week items
+- Add AI usage quotas (payments later)
+- Theme: faster class management, instant Q&A, and learning-first AI use
 
-
-- CORE FEATURES:
-- ADD CLASS
-- UPLOAD DOCUMENTS TO CLASS
-- AI TRAINS OF THAT INFORMATION AND IT PRODUCES POPULAR INFO ABOUT UR CLASS AND WE JUST SCAN THE DOCUMENTS AND FIND FROM KEY WORDS
-- IN FUTURE CREATE OUR OWN MODEL TO DO THIS???
-- STORE CLASSES PER USER
-- WORK ON .TXT TRANSFER OF DOCUMEEWORK PROBELSM AND STUDENTS SHOULD LEARN
-
-## PLAN AND TODO
-- STORE CLASSES PER USER
-- WORK ON .TXT TRANSFER OF DOCUEMNTS
-- GET AWS SYSTEM FOR FILE STORAGE
-- BEGIN RESEARCH ON AI CONNECTION
-
-## UPLOAD SYSTEM
-1) User uploads a document
-In the UI (your drag/drop zones on /classes/new), the browser selects one or more files.
-The client sends the file bytes to your backend, typically via:
-POST /api/uploads (multipart form-data), or
-a direct-to-storage upload (S3/R2) + then notify your backend with the file URL.
-Key point: you must receive the bytes somewhere to extract text.
-
-2) Backend stores the file temporarily
-You have two common patterns:
-
-A. Temp on disk (simple locally)
-
-Save to something like /tmp/<upload-id> (or a serverless temp directory if supported).
-Good for local/dev and simple deployments.
-B. Temp in object storage (best for production)
-
-Upload to a private bucket location like uploads/tmp/<upload-id>/<filename>.
-This avoids “disk” issues on serverless and scales better.
-You also create an Upload record (DB) with status:
-
-pending → processing → done or failed
-and metadata: userId, classId, filename, mimeType, size, createdAt
-3) Text extraction pipeline runs
-A worker/job (or the request itself for small files) does:
-
-Detect file type
-
-PDF, DOCX, image, etc.
-Extract text
-
-PDF (text-based): parse embedded text
-PDF (scanned): run OCR
-DOCX: extract text from document structure
-Images: OCR
-Normalize + clean
-
-Remove repeated headers/footers
-Fix hyphenated line breaks
-Normalize whitespace
-Keep page/section boundaries if helpful
-Chunking (recommended)
-
-Split text into smaller chunks (e.g., 500–1500 tokens/words) for search/AI.
-Store chunk metadata (page number, source filename).
-4) Persist only derived data (not the raw file)
-Store in your DB (or vector DB later):
-
-Document record: title, classId, userId, type, createdAt
-DocumentText (or DocumentChunks): extracted text + chunk boundaries
-Optional: embeddings for retrieval (later)
-What you don’t keep (by default):
-
-the original PDF/DOCX/image bytes
-5) Delete the original file (immediately or with TTL)
-Once extraction succeeds (or even on failure, depending on policy):
-
-Delete from temp disk or from uploads/tmp/... storage
-Mark upload record done
-Retention variants
-
-Immediate delete: best privacy posture
-Short TTL (e.g., 1–24 hours): easier debugging/retries
-User-controlled retention: “Keep originals” toggle (off by default)
-6) UI feedback to the user
-Client polls or subscribes to status:
-“Uploading…” → “Processing…” → “Ready”
-When ready, show extracted info (class name suggestions, schedule detection, key dates, etc.) and enable chat/search.
-Why this is usually the best MVP choice
-Works with any file type you can parse/OCR.
-Doesn’t require heavy in-browser processing.
-You can confidently say: “We don’t store your originals (we delete them after processing)”—but be precise that files are processed transiently.
-Implementation note for your repo
-Given your App Router setup, the typical pieces are:
+## Notes
+- Document originals are stored in Vercel Blob during processing and cleared after extraction
+- Chat only uses each user's class documents (no cross-user context)
 
 app/api/uploads/route.ts (accept upload, create upload record)
 src/server/extract/* (parsers + OCR + chunking)

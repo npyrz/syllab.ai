@@ -1,7 +1,5 @@
 import { prisma } from '@/lib/prisma';
 import { extractText } from '@/lib/text-extraction';
-import { promises as fs } from 'fs';
-import path from 'path';
 
 /**
  * Process a document: extract text and update database
@@ -28,25 +26,30 @@ export async function processDocument(documentId: string): Promise<void> {
 
     console.log(`[Worker] Extracting text from: ${document.filename}`);
 
-    // Extract text from the file
-    const filePath = path.join(process.cwd(), document.storageKey);
-    const extractedText = await extractText(filePath, document.mimeType);
+    if (!document.storageKey) {
+      throw new Error('Storage key is missing for this document');
+    }
+
+    // Extract text from the blob
+    const response = await fetch(document.storageKey);
+    if (!response.ok) {
+      throw new Error(`Failed to download blob: ${response.status}`);
+    }
+    const arrayBuffer = await response.arrayBuffer();
+    const buffer = Buffer.from(arrayBuffer);
+    const extractedText = await extractText(buffer, document.mimeType);
 
     console.log(
       `[Worker] Extracted ${extractedText.length} characters from ${document.filename}`
     );
     console.log(`[Worker] Text preview:\n${extractedText.substring(0, 500)}...\n`);
 
-    // Save extracted text as .txt file for reference
-    const txtPath = filePath.replace(/\.[^.]+$/, '.txt');
-    await fs.writeFile(txtPath, extractedText, 'utf-8');
-    console.log(`[Worker] Saved extracted text to: ${txtPath}`);
-
     // Update document with extracted text
     await prisma.document.update({
       where: { id: documentId },
       data: {
         textExtracted: extractedText,
+        storageKey: null,
         status: 'done',
         processedAt: new Date(),
       },

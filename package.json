@@ -14,8 +14,11 @@
     "db:example": "tsx index.ts"
   },
   "dependencies": {
+    "@ai-sdk/groq": "^3.0.22",
     "@prisma/adapter-pg": "^6.1.0",
     "@prisma/client": "^7.3.0",
+    "@vercel/blob": "^0.23.4",
+    "ai": "^6.0.79",
     "bcryptjs": "^2.4.3",
     "dotenv": "^16.4.7",
     "mammoth": "^1.11.0",
@@ -24,7 +27,9 @@
     "pdfjs-dist": "^5.4.624",
     "pg": "^8.13.1",
     "react": "19.2.3",
-    "react-dom": "19.2.3"
+    "react-dom": "19.2.3",
+    "react-markdown": "^10.1.0",
+    "remark-gfm": "^4.0.1"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
