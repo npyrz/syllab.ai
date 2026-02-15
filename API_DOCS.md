@@ -6,6 +6,7 @@ This system allows authenticated users to:
 2. Upload documents (PDF/DOCX) to classes
 3. Automatically extract text from documents
 4. Store extracted text for AI queries
+5. Ask class-specific questions via chat
 
 ## API Endpoints
 
@@ -112,6 +113,28 @@ Upload a document to a class.
 }
 ```
 
+### Chat
+
+#### POST /api/chat
+Answer a question using only the selected class's extracted documents.
+
+**Body:**
+```json
+{
+  "classId": "class123",
+  "message": "What are the quiz dates?"
+}
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "response": "## TL;DR\n- ✅ ...",
+  "documentsUsed": 1
+}
+```
+
 #### GET /api/documents/[id]
 Fetch a specific document by ID.
 
@@ -138,25 +161,20 @@ Fetch a specific document by ID.
 ## Document Processing Flow
 
 1. **Upload**: User uploads document via `POST /api/documents`
-2. **Storage**: File saved to `uploads/` directory
-3. **Database**: Document record created with `status: pending`
+2. **Storage**: File saved to Vercel Blob
+3. **Database**: Document record created with `status: pending` and `storageKey`
 4. **Extraction**: Worker extracts text using pdfjs-dist (PDF) and mammoth (DOCX)
-5. **Console Output**: Extracted text logged to console
-6. **Text File**: Extracted text saved as `.txt` file
-7. **Database Update**: 
-   - `textExtracted` field populated
-   - `status` updated to `done`
-   - `processedAt` timestamp set
+5. **Database Update**:
+  - `textExtracted` field populated
+  - `status` updated to `done`
+  - `processedAt` timestamp set
+  - `storageKey` cleared after extraction
 
-## File Structure
+## Storage
 
-```
-uploads/
-  ├── 1738745600000_syllabus.pdf        # Original file
-  ├── 1738745600000_syllabus.txt        # Extracted text
-  ├── 1738745700000_lecture-notes.docx
-  └── 1738745700000_lecture-notes.txt
-```
+- Original files live in Vercel Blob during processing
+- Extracted text is stored in the database
+- Originals are cleared after extraction
 
 ## Supported File Types
 
@@ -197,8 +215,7 @@ curl http://localhost:3000/api/documents/document-id \
 
 ## Next Steps
 
-After documents are extracted, you can:
-1. Build the AI query endpoint (`POST /api/ai/query`)
-2. Fetch user's documents and concatenate text
-3. Send to Groq API with user's query
-4. Return AI-generated insights
+- Improve chat formatting and citation style
+- Add class dashboard with upcoming assignments and this-week items
+- Add document management on class pages
+- Add AI usage quotas (payments later)

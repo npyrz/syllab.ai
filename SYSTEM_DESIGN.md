@@ -29,7 +29,7 @@ Non-goals (current scope):
 
 **External Services**
 - Google OAuth (optional)
-- Object storage (S3/R2/GCS)
+- Vercel Blob (object storage)
 - Document processing workers (background)
 - Groq API (LLM)
 
@@ -59,6 +59,7 @@ Browser
 - Auth handler at `app/api/auth/[...nextauth]/route.ts` via `auth.ts` configuration.
 - Classes API at `app/api/classes/route.ts` (authenticated `GET` and `POST`).
 - Documents API at `app/api/documents/route.ts` (authenticated `GET` and `POST`).
+- Chat API at `app/api/chat/route.ts` (authenticated `POST`).
 
 ### 4.3 Data Layer
 - Prisma schema in `prisma/schema.prisma`.
@@ -94,7 +95,7 @@ Browser
 - `classId` (FK -> Class)
 - `userId` (FK -> User)
 - `filename`, `mimeType`, `sizeBytes`
-- `storageKey` (object storage key)
+- `storageKey` (object storage key, nullable after extraction)
 - `status` (`pending` | `processing` | `done` | `failed`)
 - `textExtracted` (nullable, stored cleaned text)
 - `createdAt`, `updatedAt`, `processedAt?`
@@ -117,18 +118,18 @@ Browser
    - Username derived from email and de-duplicated.
 3. Session includes `user.id`.
 
-### 7.3 Create Class (Current Stub)
+### 7.3 Create Class
 1. User fills out `/classes/new` and selects files.
 2. Client submits JSON to `POST /api/classes`.
 3. Client uploads selected files to `POST /api/documents` with `classId`.
-4. API stores files, extracts text, and updates document status.
+4. API stores files to Vercel Blob, extracts text, and updates document status.
 
 ## 8) Document Ingestion & Processing Pipeline
 **Core Principle:** Extract text, link to user, serve context-specific AI responses.
 
 High-level workflow:
 1. **Upload**: User uploads document to `POST /api/documents` (authenticated).
-2. **Store**: API creates `Document` record with `status: pending` and saves file to local `uploads/` with `storageKey`.
+2. **Store**: API creates `Document` record with `status: pending` and saves file to Vercel Blob with `storageKey`.
 3. **Extract** (background worker):
   - Read file from `uploads/`.
   - Extract text (PDF via `pdfjs-dist`, DOCX via `mammoth`).
@@ -136,7 +137,7 @@ High-level workflow:
   - Store in `Document.textExtracted`.
   - Update `status: done` or `status: failed`.
 4. **Cache**: User's extracted text lives in DB, indexed by `userId` for fast retrieval.
-5. **Delete Original**: After successful extraction, delete from object storage (optional TTL).
+5. **Delete Original**: After successful extraction, clear `storageKey` (original blob no longer referenced).
 
 **Privacy Guarantee:** Every API query to Groq is scoped by `userId`:
 - Fetch all `Document` records where `userId = sessionUser.id`.
@@ -146,14 +147,14 @@ High-level workflow:
 
 ## 9) AI Query Flow (Groq API)
 1. User submits query in UI (e.g., "Summarize the syllabus").
-2. Client calls `POST /api/ai/query` (authenticated).
-3. API retrieves session `user.id` and fetches all their documents:
+2. Client calls `POST /api/chat` (authenticated).
+3. API retrieves session `user.id` and fetches class-scoped documents:
   ```sql
-  SELECT textExtracted FROM Document WHERE userId = $1 AND status = 'done'
+  SELECT textExtracted FROM Document WHERE userId = $1 AND classId = $2 AND status = 'done'
   ```
 4. Concatenate texts into context (limit size to fit Groq token limits).
 5. Call Groq with:
-  - System prompt: "You are a helpful assistant. Only use the provided documents."
+  - System prompt: "Answer only from provided documents and format as TL;DR, Details, Source."
   - User message: Query + concatenated document text.
 6. Return Groq response to client.
 7. Log query + response for auditing (optional).
@@ -164,7 +165,7 @@ High-level workflow:
 - **Authentication**: Required on all API routes. Check `auth()` session.
 - **Authorization**: Every query checks `userId` ownership:
   - `GET /api/documents` → only return docs where `userId = session.user.id`.
-  - `POST /api/ai/query` → only use docs where `userId = session.user.id`.
+  - `POST /api/chat` → only use docs where `userId = session.user.id`.
 - **Data Isolation**: Groq context includes only that user's extracted text.
 - **Credential Safety**: Groq API key stored in env vars, server-side only.
 - **File Retention**: Delete original files after extraction or set TTL to minimize storage.
@@ -177,6 +178,7 @@ High-level workflow:
 - **Database Indexes**: `Document(userId, status)` for fast doc retrieval in AI queries.
 - **Text Storage**: Store in DB for simplicity. For large corpora, migrate to vector DB later.
 - **Groq Rate Limits**: Implement user-level request throttling to avoid quota issues.
+- **Usage Quotas**: Add per-user AI usage caps; payments later.
 
 ## 12) Data Model Details
 **User** (no changes to auth model)
@@ -194,7 +196,7 @@ High-level workflow:
 ## 13) Deployment & Infrastructure
 - **Next.js**: Vercel (or self-hosted Node.js).
 - **PostgreSQL**: Managed service (AWS RDS, Heroku, Railway, etc.).
-- **Object Storage**: Cloudflare R2 or AWS S3 (presigned URLs for client uploads).
+- **Object Storage**: Vercel Blob (current), future S3/R2 possible.
 - **Background Jobs**: Vercel Functions, Trigger.dev, or BullMQ with Redis.
 - **Groq API Key**: Store in Vercel environment variables.
 - **Environment Variables**:
@@ -203,13 +205,14 @@ High-level workflow:
   - `S3_BUCKET`, `S3_REGION`, `S3_ACCESS_KEY`, `S3_SECRET_KEY` (or R2 equivalents)
 
 ## 14) Next Steps
-1. 🔲 Build `POST /api/documents` (create document, upload to storage).
-2. 🔲 Build background extraction worker (PDF/DOCX text parsing).
-3. 🔲 Build `POST /api/ai/query` with Groq integration and user-scoped context.
-4. 🔲 Add UI for document upload feedback (processing status).
-5. 🔲 Add UI for AI query interface (chat with your documents).
-6. 🔲 Rate limiting + audit logging.
-7. 🔲 Tests + error handling.
+1. Improve chat responses (TL;DR, sources, better formatting).
+2. UI fixes for classes and class dashboard.
+3. Manage documents on class tab (status, delete, reprocess).
+4. Upload lecture slides and materials to create study material.
+5. Add upcoming assignments and this-week views on class pages.
+6. Add AI usage quotas (payments later).
+6. Rate limiting + audit logging.
+7. Tests + error handling.
 
 ---
 **Document status:** Updated system design with user-scoped document extraction and AI queries (February 4, 2026).
