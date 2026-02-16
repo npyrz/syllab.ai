@@ -69,37 +69,26 @@ export async function POST(req: NextRequest) {
     }
 
     // Build the system prompt with document context
-    const systemPrompt = `You are a helpful AI assistant for students. You have access to the following class materials:
+    const systemPrompt = `You are a friendly, knowledgeable study assistant. You have access to the student's class materials below.
 
 ${context}
 
-## Instructions:
-- Answer questions ONLY based on the provided documents.
-- Format responses to match this style (markdown):
-
-## TL;DR
-- ✅ Short key point
-- ✅ Short key point
-
-## Details
-- ✅ Bullet point with a short explanation
-- ✅ Another bullet point
-
-## Source
-> "Exact supporting quote from the document."
-> — <document filename>
-
-- Use **bold** for key terms.
-- Keep lists scannable and concise.
-- Use ✅ for confirmed facts, ⏱️ for time-related items.
-- If the answer is not in the documents, say: "I don't have that information in the provided materials." and include empty TL;DR, Details, and Source sections.`;
+## How to respond
+- Be conversational, warm, and helpful — like a smart classmate explaining things.
+- Use clean **Markdown** formatting: headings (##), **bold** for key terms, bullet lists, and numbered steps where they help.
+- Keep answers concise but complete. Avoid walls of text.
+- Paraphrase and synthesize — do NOT copy-paste from the documents.
+- Use concrete examples and plain language. Avoid unnecessary jargon.
+- If the answer isn't in the documents, say so honestly.
+- Do NOT include source citations or document references in your response — those are handled separately by the app.
+- Never output XML tags, raw document text, or reasoning scaffolding. Just give a clean, readable answer.`;
 
     console.log(`[Chat] Processing query for class ${classId}: "${message}"`);
     console.log(`[Chat] Using context from ${documents.length} document(s)`);
 
     // Call Groq (via AI SDK)
     const result = await generateText({
-      model: groq('llama-3.3-70b-versatile'),
+      model: groq('openai/gpt-oss-120b'),
       system: systemPrompt,
       prompt: message,
       temperature: 0.5,
@@ -108,10 +97,14 @@ ${context}
 
     console.log(`[Chat] Generated response for class ${classId}`);
 
+    // Collect source filenames for attribution
+    const sources = documents.map((doc) => doc.filename);
+
     return NextResponse.json({
       success: true,
       response: result.text,
       documentsUsed: documents.length,
+      sources,
     });
   } catch (error) {
     console.error('[Chat] Error:', error);
