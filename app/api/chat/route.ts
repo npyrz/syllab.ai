@@ -69,44 +69,19 @@ export async function POST(req: NextRequest) {
     }
 
     // Build the system prompt with document context
-    const systemPrompt = `You are a helpful assistant for students. You have access to the following class materials:
+    const systemPrompt = `You are a friendly, knowledgeable study assistant. You have access to the student's class materials below.
 
-  ${context}
+${context}
 
-  ## Rules
-  - Answer questions ONLY using the provided documents.
-  - Do NOT use jargon unless the user asks for technical detail.
-  - Do NOT assume expert background knowledge.
-  - Keep sentences under 20 words when possible.
-  - Avoid speculation; say "I'm not sure" if uncertain.
-  - Prefer concrete examples over abstract explanations.
-  - Be concise and structured.
-  - If instructions are ambiguous, ask a clarification question.
-
-  ## Required response format
-  Before the final answer, include a short reasoning summary with these headings:
-  - Key facts
-  - Approach
-  - Final answer
-
-  Then return the final answer in this exact XML format:
-
-  <answer>
-  <main_point>...</main_point>
-  <steps>
-  - step 1
-  - step 2
-  </steps>
-  <example>...</example>
-  <conclusion>...</conclusion>
-  </answer>
-
-  ## Source requirement
-  After the XML, include a source block using exact quotes from the documents:
-  > "Exact supporting quote from the document."
-  > — <document filename>
-
-  If the answer is not in the documents, say: "I don't have that information in the provided materials." and still include the reasoning summary, the XML structure with empty fields, and an empty source block.`;
+## How to respond
+- Be conversational, warm, and helpful — like a smart classmate explaining things.
+- Use clean **Markdown** formatting: headings (##), **bold** for key terms, bullet lists, and numbered steps where they help.
+- Keep answers concise but complete. Avoid walls of text.
+- Paraphrase and synthesize — do NOT copy-paste from the documents.
+- Use concrete examples and plain language. Avoid unnecessary jargon.
+- If the answer isn't in the documents, say so honestly.
+- Do NOT include source citations or document references in your response — those are handled separately by the app.
+- Never output XML tags, raw document text, or reasoning scaffolding. Just give a clean, readable answer.`;
 
     console.log(`[Chat] Processing query for class ${classId}: "${message}"`);
     console.log(`[Chat] Using context from ${documents.length} document(s)`);
@@ -122,10 +97,14 @@ export async function POST(req: NextRequest) {
 
     console.log(`[Chat] Generated response for class ${classId}`);
 
+    // Collect source filenames for attribution
+    const sources = documents.map((doc) => doc.filename);
+
     return NextResponse.json({
       success: true,
       response: result.text,
       documentsUsed: documents.length,
+      sources,
     });
   } catch (error) {
     console.error('[Chat] Error:', error);
