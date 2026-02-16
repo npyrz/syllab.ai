@@ -182,9 +182,7 @@ ${context}
       maxOutputTokens: 2048,
     });
 
-    const totalTokens =
-      result.usage?.totalTokens ??
-      (result.usage?.promptTokens ?? 0) + (result.usage?.completionTokens ?? 0);
+    const totalTokens = result.usage?.totalTokens ?? 0;
 
     await Promise.all([
       prisma.apiUsageDaily.update({
