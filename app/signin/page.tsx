@@ -1,4 +1,5 @@
 import { auth, signIn } from "@/auth";
+import TimezoneInput from "@/app/components/TimezoneInput";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 
@@ -64,14 +65,17 @@ export default async function SignInPage({ searchParams }: SignInPageProps) {
                   .trim()
                   .toLowerCase();
                 const password = String(formData.get("password") ?? "");
+                const timezone = String(formData.get("timezone") ?? "").trim();
                 await signIn("credentials", {
                   email,
                   password,
                   redirectTo: callbackUrl,
+                  timezone,
                 });
               }}
               className="flex flex-col gap-3"
             >
+              <TimezoneInput />
               <label className="flex flex-col gap-1">
                 <span className="text-xs text-zinc-400">Email</span>
                 <input

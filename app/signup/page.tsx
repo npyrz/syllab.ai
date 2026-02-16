@@ -1,6 +1,7 @@
 import Link from "next/link";
 
 import { signIn } from "@/auth";
+import TimezoneInput from "@/app/components/TimezoneInput";
 import { prisma } from "@/lib/prisma";
 import { hashPassword } from "@/lib/password";
 import { redirect } from "next/navigation";
@@ -48,6 +49,21 @@ export default async function SignUpPage({ searchParams }: SignUpPageProps) {
                 .trim()
                 .toLowerCase();
               const password = String(formData.get("password") ?? "");
+              const timeZoneRaw = String(formData.get("timezone") ?? "").trim();
+
+              const isValidTimeZone = (value: string) => {
+                try {
+                  Intl.DateTimeFormat("en-US", { timeZone: value }).format(
+                    new Date()
+                  );
+                  return true;
+                } catch {
+                  return false;
+                }
+              };
+
+              const timeZone =
+                timeZoneRaw && isValidTimeZone(timeZoneRaw) ? timeZoneRaw : "UTC";
 
               if (!username || !email || !password) {
                 redirect(`/signup?error=InvalidInput&callbackUrl=${encodeURIComponent(callbackUrl)}`);
@@ -75,6 +91,7 @@ export default async function SignUpPage({ searchParams }: SignUpPageProps) {
                   provider: "credentials",
                   lastLoginAt: new Date(),
                   lastSeenAt: new Date(),
+                  timezone: timeZone,
                 },
               });
 
@@ -82,10 +99,12 @@ export default async function SignUpPage({ searchParams }: SignUpPageProps) {
                 email,
                 password,
                 redirectTo: callbackUrl,
+                timezone: timeZone,
               });
             }}
             className="mt-6 flex flex-col gap-3"
           >
+            <TimezoneInput />
             <label className="flex flex-col gap-1">
               <span className="text-xs text-zinc-400">Username</span>
               <input

@@ -13,12 +13,14 @@ model User {
   name         String?
   passwordHash String?
   provider     String?
+  timezone     String    @default("UTC")
   lastLoginAt  DateTime?
   lastSeenAt   DateTime?
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
   classes      Class[]
   documents    Document[]
+  apiUsageDaily ApiUsageDaily[]
 }
 
 model Class {
@@ -53,6 +55,32 @@ model Document {
   @@index([userId])
   @@index([classId])
   @@index([status])
+}
+
+model ApiUsageDaily {
+  id           String   @id @default(cuid())
+  userId       String
+  windowStart  DateTime
+  requestCount Int      @default(0)
+  tokenCount   Int      @default(0)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, windowStart])
+  @@index([userId])
+  @@index([windowStart])
+}
+
+model ApiUsageGlobalDaily {
+  id           String   @id @default(cuid())
+  windowStart  DateTime @unique
+  requestCount Int      @default(0)
+  tokenCount   Int      @default(0)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([windowStart])
 }
 
 enum DocumentStatus {
