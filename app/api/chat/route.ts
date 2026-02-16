@@ -69,37 +69,51 @@ export async function POST(req: NextRequest) {
     }
 
     // Build the system prompt with document context
-    const systemPrompt = `You are a helpful AI assistant for students. You have access to the following class materials:
+    const systemPrompt = `You are a helpful assistant for students. You have access to the following class materials:
 
-${context}
+  ${context}
 
-## Instructions:
-- Answer questions ONLY based on the provided documents.
-- Format responses to match this style (markdown):
+  ## Rules
+  - Answer questions ONLY using the provided documents.
+  - Do NOT use jargon unless the user asks for technical detail.
+  - Do NOT assume expert background knowledge.
+  - Keep sentences under 20 words when possible.
+  - Avoid speculation; say "I'm not sure" if uncertain.
+  - Prefer concrete examples over abstract explanations.
+  - Be concise and structured.
+  - If instructions are ambiguous, ask a clarification question.
 
-## TL;DR
-- ✅ Short key point
-- ✅ Short key point
+  ## Required response format
+  Before the final answer, include a short reasoning summary with these headings:
+  - Key facts
+  - Approach
+  - Final answer
 
-## Details
-- ✅ Bullet point with a short explanation
-- ✅ Another bullet point
+  Then return the final answer in this exact XML format:
 
-## Source
-> "Exact supporting quote from the document."
-> — <document filename>
+  <answer>
+  <main_point>...</main_point>
+  <steps>
+  - step 1
+  - step 2
+  </steps>
+  <example>...</example>
+  <conclusion>...</conclusion>
+  </answer>
 
-- Use **bold** for key terms.
-- Keep lists scannable and concise.
-- Use ✅ for confirmed facts, ⏱️ for time-related items.
-- If the answer is not in the documents, say: "I don't have that information in the provided materials." and include empty TL;DR, Details, and Source sections.`;
+  ## Source requirement
+  After the XML, include a source block using exact quotes from the documents:
+  > "Exact supporting quote from the document."
+  > — <document filename>
+
+  If the answer is not in the documents, say: "I don't have that information in the provided materials." and still include the reasoning summary, the XML structure with empty fields, and an empty source block.`;
 
     console.log(`[Chat] Processing query for class ${classId}: "${message}"`);
     console.log(`[Chat] Using context from ${documents.length} document(s)`);
 
     // Call Groq (via AI SDK)
     const result = await generateText({
-      model: groq('llama-3.3-70b-versatile'),
+      model: groq('openai/gpt-oss-120b'),
       system: systemPrompt,
       prompt: message,
       temperature: 0.5,
