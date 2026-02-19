@@ -135,6 +135,7 @@ Prisma schema lives in `prisma/schema.prisma`.
 - Update class view to show upcoming assignments and this-week items (AI auto extracts important information)
 - Add AI usage quotas (payments later)
 - Theme: faster class management, instant Q&A, and learning-first AI use
+- MAKE SURE TOKENS DONT CHARGE ME (AUTO RENEW)
 
 ## Notes
 - Document originals are stored in Vercel Blob during processing and cleared after extraction

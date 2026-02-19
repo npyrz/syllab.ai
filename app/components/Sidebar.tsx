@@ -25,14 +25,14 @@ export default async function Sidebar() {
     : [];
 
   return (
-    <aside className="flex h-dvh w-[80px] flex-col items-center bg-zinc-900 text-zinc-100">
+    <aside className="flex h-dvh w-[80px] flex-col items-center bg-[color:var(--app-sidebar)] text-[color:var(--app-text)]">
       <div className="flex w-full flex-col items-center pt-6">
         {session ? (
           <Link
             href="/classes/new"
             aria-label="Add class"
             title="Create class"
-            className="group mt-4 inline-flex h-12 w-12 items-center justify-center rounded-xl bg-cyan-300/10 text-cyan-200 ring-1 ring-cyan-300/20 shadow-[0_0_0_1px_rgba(34,211,238,0.12)] transition hover:bg-cyan-300/15 hover:text-cyan-100"
+            className="group mt-4 inline-flex h-12 w-12 items-center justify-center rounded-xl bg-[color:var(--app-elevated)] text-[color:var(--app-text)] ring-1 ring-[color:var(--app-border)] transition hover:bg-[color:var(--app-surface)]"
           >
             <span aria-hidden className="text-2xl leading-none">
               +
@@ -43,7 +43,7 @@ export default async function Sidebar() {
             href="/signin"
             aria-label="Sign in to create a class"
             title="Sign in"
-            className="group mt-4 inline-flex h-12 w-12 items-center justify-center rounded-xl bg-cyan-300/10 text-cyan-200 ring-1 ring-cyan-300/20 shadow-[0_0_0_1px_rgba(34,211,238,0.12)] transition hover:bg-cyan-300/15 hover:text-cyan-100"
+            className="group mt-4 inline-flex h-12 w-12 items-center justify-center rounded-xl bg-[color:var(--app-elevated)] text-[color:var(--app-text)] ring-1 ring-[color:var(--app-border)] transition hover:bg-[color:var(--app-surface)]"
           >
             <span aria-hidden className="text-2xl leading-none">
               +
@@ -59,7 +59,7 @@ export default async function Sidebar() {
                 href={`/classes/${course.id}`}
                 title={course.title}
                 aria-label={`Open ${course.title}`}
-                className="group relative inline-flex h-11 w-11 items-center justify-center rounded-full bg-white/5 text-xs font-semibold text-zinc-100 ring-1 ring-white/10 transition hover:bg-white/10"
+                className="group relative inline-flex h-11 w-11 items-center justify-center rounded-full bg-[color:var(--app-surface)] text-xs font-semibold text-[color:var(--app-text)] ring-1 ring-[color:var(--app-border)] transition hover:bg-[color:var(--app-elevated)]"
               >
                 <span className="text-[11px] tracking-wide">
                   {getInitials(course.title)}

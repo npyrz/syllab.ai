@@ -37,3 +37,17 @@ export async function updateUserTimezoneAction(timeZone: string) {
     data: { timezone: cleaned },
   });
 }
+
+export async function updateUserThemeAction(theme: string) {
+  const session = await auth();
+  const userId = (session?.user as unknown as { id?: string } | undefined)?.id;
+  if (!userId) return;
+
+  const cleaned = String(theme ?? "").trim();
+  if (cleaned !== "light" && cleaned !== "dark") return;
+
+  await prisma.user.updateMany({
+    where: { id: userId },
+    data: { theme: cleaned },
+  });
+}

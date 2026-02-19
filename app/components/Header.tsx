@@ -3,33 +3,40 @@ import Link from "next/link";
 import { auth } from "@/auth";
 import ProfileMenu from "@/app/components/ProfileMenu";
 import LogoMark from "@/app/components/LogoMark";
+import ThemeToggle from "@/app/components/ThemeToggle";
 
-export default async function Header() {
+type HeaderProps = {
+  initialTheme: "light" | "dark" | null;
+};
+
+export default async function Header({ initialTheme }: HeaderProps) {
   const session = await auth();
 
   return (
-    <header className="sticky top-0 z-50 w-full bg-black">
-      <div className="flex h-16 w-full items-center px-4 sm:px-6">
+    <header className="sticky top-0 z-50 w-full bg-[color:var(--app-bg)]">
+      <div className="flex h-16 w-full items-center border-b border-[color:var(--app-border)] px-4 sm:px-6">
         <div className="flex w-full items-center justify-between gap-6">
           <Link href="/" aria-label="Home" className="inline-flex items-center">
             <LogoMark className="h-7 w-auto" />
           </Link>
 
-          <div className="flex items-center gap-8">
-            <div className="hidden items-center gap-8 text-sm text-zinc-300 md:flex">
-            <a href="#" className="hover:text-zinc-50">
-              About syllab.ai
-            </a>
-            <a href="#" className="hover:text-zinc-50">
-              Pricing
-            </a>
-            <a href="#" className="hover:text-zinc-50">
-              FAQ
-            </a>
-            <a href="#" className="hover:text-zinc-50">
-              Support
-            </a>
+          <div className="flex items-center gap-4">
+            <div className="hidden items-center gap-8 text-sm text-[color:var(--app-subtle)] md:flex">
+              <a href="#" className="transition hover:text-[color:var(--app-text)]">
+                About Syllab.ai
+              </a>
+              <a href="#" className="transition hover:text-[color:var(--app-text)]">
+                Pricing
+              </a>
+              <a href="#" className="transition hover:text-[color:var(--app-text)]">
+                FAQ
+              </a>
+              <a href="#" className="transition hover:text-[color:var(--app-text)]">
+                Support
+              </a>
             </div>
+
+            <ThemeToggle initialTheme={initialTheme} />
 
             {session ? (
               <ProfileMenu user={session.user} />

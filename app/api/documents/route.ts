@@ -167,3 +167,44 @@ export async function POST(req: NextRequest) {
     );
   }
 }
+
+/**
+ * DELETE /api/documents
+ * Delete a document owned by the authenticated user
+ */
+export async function DELETE(req: NextRequest) {
+  const session = await auth();
+  if (!session?.user?.id) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
+  try {
+    const { id } = await req.json();
+
+    if (!id) {
+      return NextResponse.json({ error: 'Document ID is required' }, { status: 400 });
+    }
+
+    const document = await prisma.document.findUnique({
+      where: { id },
+      select: { id: true, userId: true },
+    });
+
+    if (!document || document.userId !== session.user.id) {
+      return NextResponse.json(
+        { error: 'Document not found or unauthorized' },
+        { status: 404 }
+      );
+    }
+
+    await prisma.document.delete({ where: { id } });
+
+    return NextResponse.json({ success: true });
+  } catch (error) {
+    console.error('[Documents] Delete error:', error);
+    return NextResponse.json(
+      { error: 'Failed to delete document' },
+      { status: 500 }
+    );
+  }
+}
