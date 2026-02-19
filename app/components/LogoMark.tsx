@@ -17,7 +17,7 @@ export default function LogoMark(props: { className?: string }) {
           fontWeight="700"
           fontSize="56"
           fill="currentColor"
-          className="text-zinc-50"
+          className="text-[color:var(--app-text)]"
         >
           syllab
         </text>

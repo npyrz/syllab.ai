@@ -4,6 +4,34 @@ import { prisma } from '@/lib/prisma';
 import { generateText } from 'ai';
 import { groq } from '@ai-sdk/groq';
 
+const USER_DAILY_REQUEST_LIMIT = 1000;
+const USER_DAILY_TOKEN_LIMIT = 200_000;
+const GLOBAL_DAILY_REQUEST_LIMIT = 1000;
+const GLOBAL_DAILY_TOKEN_LIMIT = 200_000;
+
+function getUtcDayStart(date: Date) {
+  return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
+}
+
+function getDayStartForTimeZone(date: Date, timeZone: string) {
+  try {
+    const parts = new Intl.DateTimeFormat('en-US', {
+      timeZone,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).formatToParts(date);
+
+    const year = Number(parts.find((part) => part.type === 'year')?.value ?? '0');
+    const month = Number(parts.find((part) => part.type === 'month')?.value ?? '1');
+    const day = Number(parts.find((part) => part.type === 'day')?.value ?? '1');
+
+    return new Date(Date.UTC(year, month - 1, day));
+  } catch {
+    return getUtcDayStart(date);
+  }
+}
+
 /**
  * POST /api/chat
  * Chat endpoint that only uses documents from the selected class
@@ -86,6 +114,65 @@ ${context}
     console.log(`[Chat] Processing query for class ${classId}: "${message}"`);
     console.log(`[Chat] Using context from ${documents.length} document(s)`);
 
+    const userRecord = await prisma.user.findUnique({
+      where: { id: session.user.id },
+      select: { timezone: true },
+    });
+
+    const now = new Date();
+    const userTimeZone = userRecord?.timezone ?? 'UTC';
+    const userDayStart = getDayStartForTimeZone(now, userTimeZone);
+    const globalDayStart = getUtcDayStart(now);
+
+    const [userUsage, globalUsage] = await Promise.all([
+      prisma.apiUsageDaily.upsert({
+        where: {
+          userId_windowStart: {
+            userId: session.user.id,
+            windowStart: userDayStart,
+          },
+        },
+        create: {
+          userId: session.user.id,
+          windowStart: userDayStart,
+        },
+        update: {},
+      }),
+      prisma.apiUsageGlobalDaily.upsert({
+        where: { windowStart: globalDayStart },
+        create: { windowStart: globalDayStart },
+        update: {},
+      }),
+    ]);
+
+    if (userUsage.requestCount >= USER_DAILY_REQUEST_LIMIT) {
+      return NextResponse.json(
+        { error: 'Daily request limit reached. Try again tomorrow.' },
+        { status: 429 }
+      );
+    }
+
+    if (userUsage.tokenCount >= USER_DAILY_TOKEN_LIMIT) {
+      return NextResponse.json(
+        { error: 'Daily token limit reached. Try again tomorrow.' },
+        { status: 429 }
+      );
+    }
+
+    if (globalUsage.requestCount >= GLOBAL_DAILY_REQUEST_LIMIT) {
+      return NextResponse.json(
+        { error: 'Global request limit reached. Try again tomorrow.' },
+        { status: 429 }
+      );
+    }
+
+    if (globalUsage.tokenCount >= GLOBAL_DAILY_TOKEN_LIMIT) {
+      return NextResponse.json(
+        { error: 'Global token limit reached. Try again tomorrow.' },
+        { status: 429 }
+      );
+    }
+
     // Call Groq (via AI SDK)
     const result = await generateText({
       model: groq('openai/gpt-oss-120b'),
@@ -94,6 +181,30 @@ ${context}
       temperature: 0.5,
       maxOutputTokens: 2048,
     });
+
+    const totalTokens = result.usage?.totalTokens ?? 0;
+
+    await Promise.all([
+      prisma.apiUsageDaily.update({
+        where: {
+          userId_windowStart: {
+            userId: session.user.id,
+            windowStart: userDayStart,
+          },
+        },
+        data: {
+          requestCount: { increment: 1 },
+          tokenCount: { increment: totalTokens },
+        },
+      }),
+      prisma.apiUsageGlobalDaily.update({
+        where: { windowStart: globalDayStart },
+        data: {
+          requestCount: { increment: 1 },
+          tokenCount: { increment: totalTokens },
+        },
+      }),
+    ]);
 
     console.log(`[Chat] Generated response for class ${classId}`);
 

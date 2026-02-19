@@ -23,12 +23,28 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
 			credentials: {
 				email: { label: "Email", type: "email" },
 				password: { label: "Password", type: "password" },
+				timezone: { label: "Timezone", type: "text" },
 			},
 			authorize: async (credentials) => {
 				const email = String(credentials?.email ?? "")
 					.trim()
 					.toLowerCase();
 				const password = String(credentials?.password ?? "");
+				const timeZoneRaw = String(credentials?.timezone ?? "").trim();
+
+				const isValidTimeZone = (value: string) => {
+					try {
+						Intl.DateTimeFormat("en-US", { timeZone: value }).format(
+							new Date()
+						);
+						return true;
+					} catch {
+						return false;
+					}
+				};
+
+				const timeZone =
+					timeZoneRaw && isValidTimeZone(timeZoneRaw) ? timeZoneRaw : null;
 
 				if (!email || !password) return null;
 
@@ -37,6 +53,13 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
 
 				const valid = await verifyPassword(password, user.passwordHash);
 				if (!valid) return null;
+
+				if (timeZone && timeZone !== user.timezone) {
+					await prisma.user.update({
+						where: { id: user.id },
+						data: { timezone: timeZone },
+					});
+				}
 
 				return {
 					id: user.id,

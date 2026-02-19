@@ -128,20 +128,15 @@ Prisma schema lives in `prisma/schema.prisma`.
 
 
 ## Game Plan
-- Improve chat responses (TL;DR, details, sources, clean formatting)
+- Code Review Updates
 - UI fixes for classes
 - Manage documents on the class tab
 - Upload lecture slides and materials to create study material
-- Update class view to show upcoming assignments and this-week items
+- Update class view to show upcoming assignments and this-week items (AI auto extracts important information)
 - Add AI usage quotas (payments later)
 - Theme: faster class management, instant Q&A, and learning-first AI use
+- MAKE SURE TOKENS DONT CHARGE ME (AUTO RENEW)
 
 ## Notes
 - Document originals are stored in Vercel Blob during processing and cleared after extraction
 - Chat only uses each user's class documents (no cross-user context)
-
-app/api/uploads/route.ts (accept upload, create upload record)
-src/server/extract/* (parsers + OCR + chunking)
-src/server/jobs/* (process upload, update status)
-A DB adapter later (Prisma/Drizzle) to persist document text and status.
-If you tell me your deployment target (Vercel? a VPS?) and which file types you want first (PDF only vs PDF+DOCX+images), I can recommend the exact extraction approach and where to run it (route handler vs background job).

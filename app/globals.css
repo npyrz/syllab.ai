@@ -1,26 +1,46 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --app-bg: #070707;
+  --app-surface: rgba(255, 255, 255, 0.06);
+  --app-panel: rgba(255, 255, 255, 0.04);
+  --app-border: rgba(255, 255, 255, 0.12);
+  --app-text: #f4f4f5;
+  --app-subtle: #a1a1aa;
+  --app-muted: #71717a;
+  --app-sidebar: #101010;
+  --app-elevated: rgba(255, 255, 255, 0.08);
+  --app-chip: rgba(255, 255, 255, 0.08);
+  --app-chip-text: #e4e4e7;
+  --app-shadow: 0 20px 60px rgba(0, 0, 0, 0.35);
+  color-scheme: dark;
+}
+
+:root[data-theme="light"] {
+  --app-bg: #f8fafc;
+  --app-surface: #ffffff;
+  --app-panel: #f1f5f9;
+  --app-border: #dbe4ef;
+  --app-text: #0f172a;
+  --app-subtle: #334155;
+  --app-muted: #64748b;
+  --app-sidebar: #f3f7fb;
+  --app-elevated: #ffffff;
+  --app-chip: #e7eef7;
+  --app-chip-text: #0f172a;
+  --app-shadow: 0 18px 48px rgba(15, 23, 42, 0.09);
+  color-scheme: light;
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
+  --color-background: var(--app-bg);
+  --color-foreground: var(--app-text);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
-
 body {
-  background: var(--background);
-  color: var(--foreground);
+  background: var(--app-bg);
+  color: var(--app-text);
   font-family: Arial, Helvetica, sans-serif;
 }
