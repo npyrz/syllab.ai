@@ -1,7 +1,6 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
 import SemesterWeekVerifier from "./SemesterWeekVerifier";
 
 type FileBucket = {
@@ -106,9 +105,7 @@ function Dropzone(props: {
 }
 
 export default function CreateClassForm() {
-  const router = useRouter();
   const [className, setClassName] = useState("");
-  const [semester, setSemester] = useState("");
 
   const [syllabus, setSyllabus] = useState<FileBucket>({ files: [] });
   const [schedule, setSchedule] = useState<FileBucket>({ files: [] });
@@ -120,9 +117,9 @@ export default function CreateClassForm() {
   const [showVerifier, setShowVerifier] = useState(false);
   const [classId, setClassId] = useState<string | null>(null);
 
-  const canSubmit = className.trim().length > 0 && semester.trim().length > 0 && !isSubmitting;
+  const canSubmit = className.trim().length > 0 && !isSubmitting;
 
-  const handleVerifySemester = async (semesterValue: string, currentWeek: number) => {
+  const handleVerifySemester = async (currentWeek: number) => {
     if (!classId) return;
     
     try {
@@ -131,21 +128,20 @@ export default function CreateClassForm() {
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           classId,
-          semester: semesterValue,
           currentWeek,
         }),
       });
 
       if (!response.ok) {
         const data = await response.json();
-        throw new Error(data?.error || "Failed to save semester info");
+        throw new Error(data?.error || "Failed to save week info");
       }
 
       setShowVerifier(false);
       window.location.assign("/home");
     } catch (err) {
-      console.error("Error verifying semester:", err);
-      setError(err instanceof Error ? err.message : "Failed to save semester info");
+      console.error("Error verifying week:", err);
+      setError(err instanceof Error ? err.message : "Failed to save week info");
     }
   };
 
@@ -166,7 +162,6 @@ export default function CreateClassForm() {
             headers: { "content-type": "application/json" },
             body: JSON.stringify({
               title: className,
-              description: semester,
             }),
           });
 
@@ -234,27 +229,15 @@ export default function CreateClassForm() {
       }}
     >
       <div className="rounded-3xl bg-[color:var(--app-surface)] p-6 ring-1 ring-[color:var(--app-border)] backdrop-blur-xl">
-        <div className="grid gap-4 md:grid-cols-2">
-          <label className="block">
-            <div className="text-xs font-medium text-[color:var(--app-text)]">Class name</div>
-            <input
-              value={className}
-              onChange={(e) => setClassName(e.target.value)}
-              placeholder="e.g. BIO 201"
-              className="mt-2 w-full rounded-2xl bg-[color:var(--app-panel)] px-4 py-3 text-sm text-[color:var(--app-text)] ring-1 ring-[color:var(--app-border)] placeholder:text-[color:var(--app-muted)] focus:outline-none focus:ring-2 focus:ring-cyan-300/40"
-            />
-          </label>
-
-          <label className="block">
-            <div className="text-xs font-medium text-[color:var(--app-text)]">Semester</div>
-            <input
-              value={semester}
-              onChange={(e) => setSemester(e.target.value)}
-              placeholder="e.g. Spring 2026"
-              className="mt-2 w-full rounded-2xl bg-[color:var(--app-panel)] px-4 py-3 text-sm text-[color:var(--app-text)] ring-1 ring-[color:var(--app-border)] placeholder:text-[color:var(--app-muted)] focus:outline-none focus:ring-2 focus:ring-cyan-300/40"
-            />
-          </label>
-        </div>
+        <label className="block">
+          <div className="text-xs font-medium text-[color:var(--app-text)]">Class name</div>
+          <input
+            value={className}
+            onChange={(e) => setClassName(e.target.value)}
+            placeholder="e.g. BIO 201"
+            className="mt-2 w-full rounded-2xl bg-[color:var(--app-panel)] px-4 py-3 text-sm text-[color:var(--app-text)] ring-1 ring-[color:var(--app-border)] placeholder:text-[color:var(--app-muted)] focus:outline-none focus:ring-2 focus:ring-cyan-300/40"
+          />
+        </label>
       </div>
 
       <Dropzone
@@ -309,7 +292,6 @@ export default function CreateClassForm() {
 
       {classId && (
         <SemesterWeekVerifier
-          classId={classId}
           isOpen={showVerifier}
           onClose={() => setShowVerifier(false)}
           onVerify={handleVerifySemester}
