@@ -162,7 +162,6 @@ export default function CreateClassForm() {
             headers: { "content-type": "application/json" },
             body: JSON.stringify({
               title: className,
-              description: semester,
             }),
           });
 
