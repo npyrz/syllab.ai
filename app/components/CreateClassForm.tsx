@@ -1,6 +1,8 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
+import SemesterWeekVerifier from "./SemesterWeekVerifier";
 
 type FileBucket = {
   files: File[];
@@ -10,6 +12,16 @@ function formatFileCount(files: File[]) {
   if (files.length === 0) return "No files selected";
   if (files.length === 1) return files[0].name;
   return `${files.length} files selected`;
+}
+
+function isScheduleLikeFilename(filename: string) {
+  const normalized = filename.toLowerCase();
+  return (
+    normalized.includes("schedule") ||
+    normalized.includes("calendar") ||
+    normalized.includes("week") ||
+    normalized.includes("timetable")
+  );
 }
 
 function Dropzone(props: {
@@ -26,21 +38,21 @@ function Dropzone(props: {
   const summary = useMemo(() => formatFileCount(bucket.files), [bucket.files]);
 
   return (
-    <div className="rounded-3xl bg-white/6 p-5 ring-1 ring-white/10 backdrop-blur-xl">
+    <div className="rounded-3xl bg-[color:var(--app-surface)] p-5 ring-1 ring-[color:var(--app-border)] backdrop-blur-xl">
       <div className="flex items-start justify-between gap-4">
         <div>
-          <div className="text-sm font-semibold text-zinc-50">{title}</div>
-          <div className="mt-1 text-xs text-zinc-400">{helper}</div>
+          <div className="text-sm font-semibold text-[color:var(--app-text)]">{title}</div>
+          <div className="mt-1 text-xs text-[color:var(--app-subtle)]">{helper}</div>
         </div>
-        <div className="text-xs text-zinc-400">{summary}</div>
+        <div className="text-xs text-[color:var(--app-subtle)]">{summary}</div>
       </div>
 
       <label
         className={
-          "mt-4 block cursor-pointer rounded-2xl border border-dashed p-6 text-center text-sm text-zinc-300 transition " +
+          "mt-4 block cursor-pointer rounded-2xl border border-dashed p-6 text-center text-sm text-[color:var(--app-text)] transition " +
           (dragOver
             ? "border-cyan-300/60 bg-cyan-300/10"
-            : "border-white/15 bg-black/30 hover:border-white/25")
+            : "border-[color:var(--app-border)] bg-[color:var(--app-panel)] hover:border-[color:var(--app-subtle)]")
         }
         onDragEnter={() => setDragOver(true)}
         onDragLeave={() => setDragOver(false)}
@@ -66,16 +78,16 @@ function Dropzone(props: {
             setBucket({ files: multiple ? incoming : incoming.slice(0, 1) });
           }}
         />
-        <div className="font-medium text-zinc-200">
+        <div className="font-medium text-[color:var(--app-text)]">
           Drag and drop files here
         </div>
-        <div className="mt-1 text-xs text-zinc-400">or click to browse</div>
+        <div className="mt-1 text-xs text-[color:var(--app-subtle)]">or click to browse</div>
       </label>
 
       {bucket.files.length ? (
-        <div className="mt-4 rounded-2xl bg-black/30 p-4 ring-1 ring-white/10">
-          <div className="text-xs font-medium text-zinc-200">Selected</div>
-          <ul className="mt-2 space-y-1 text-xs text-zinc-400">
+        <div className="mt-4 rounded-2xl bg-[color:var(--app-panel)] p-4 ring-1 ring-[color:var(--app-border)]">
+          <div className="text-xs font-medium text-[color:var(--app-text)]">Selected</div>
+          <ul className="mt-2 space-y-1 text-xs text-[color:var(--app-subtle)]">
             {bucket.files.map((file) => (
               <li key={`${file.name}-${file.size}`}>{file.name}</li>
             ))}
@@ -94,6 +106,7 @@ function Dropzone(props: {
 }
 
 export default function CreateClassForm() {
+  const router = useRouter();
   const [className, setClassName] = useState("");
   const [semester, setSemester] = useState("");
 
@@ -103,8 +116,38 @@ export default function CreateClassForm() {
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  
+  const [showVerifier, setShowVerifier] = useState(false);
+  const [classId, setClassId] = useState<string | null>(null);
 
   const canSubmit = className.trim().length > 0 && semester.trim().length > 0 && !isSubmitting;
+
+  const handleVerifySemester = async (semesterValue: string, currentWeek: number) => {
+    if (!classId) return;
+    
+    try {
+      const response = await fetch("/api/classes", {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          classId,
+          semester: semesterValue,
+          currentWeek,
+        }),
+      });
+
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data?.error || "Failed to save semester info");
+      }
+
+      setShowVerifier(false);
+      window.location.assign("/home");
+    } catch (err) {
+      console.error("Error verifying semester:", err);
+      setError(err instanceof Error ? err.message : "Failed to save semester info");
+    }
+  };
 
   return (
     <form
@@ -137,15 +180,18 @@ export default function CreateClassForm() {
 
           // Step 2: Upload all files
           const allFiles = [
-            ...syllabus.files,
-            ...schedule.files,
-            ...misc.files,
+            ...syllabus.files.map((file) => ({ file, docType: "syllabus" as const })),
+            ...schedule.files.map((file) => ({ file, docType: "schedule" as const })),
+            ...misc.files.map((file) => ({ file, docType: "other" as const })),
           ];
 
-          for (const file of allFiles) {
+          let hasDetectedSchedule = false;
+
+          for (const item of allFiles) {
             const formData = new FormData();
-            formData.append("file", file);
+            formData.append("file", item.file);
             formData.append("classId", classId);
+            formData.append("docType", item.docType);
 
             const uploadResponse = await fetch("/api/documents", {
               method: "POST",
@@ -154,13 +200,32 @@ export default function CreateClassForm() {
 
             if (!uploadResponse.ok) {
               const errorData = await uploadResponse.json();
-              console.error(`Failed to upload ${file.name}:`, errorData);
+              console.error(`Failed to upload ${item.file.name}:`, errorData);
               // Continue with other files even if one fails
+              continue;
+            }
+
+            try {
+              const uploadData = await uploadResponse.json();
+              if (item.docType === "schedule" || uploadData?.document?.docType === "schedule") {
+                hasDetectedSchedule = true;
+              }
+            } catch {
+              if (item.docType === "schedule" || isScheduleLikeFilename(item.file.name)) {
+                hasDetectedSchedule = true;
+              }
             }
           }
 
-          // Step 3: Redirect to home
-          window.location.href = "/home";
+          // Step 3: If schedule documents were uploaded, show verifier
+          if (hasDetectedSchedule) {
+            setClassId(classId);
+            setShowVerifier(true);
+            setIsSubmitting(false);
+          } else {
+            // No schedule doc - redirect immediately
+            window.location.assign("/home");
+          }
         } catch (err) {
           console.error("Error creating class:", err);
           setError(err instanceof Error ? err.message : "Failed to create class");
@@ -168,25 +233,25 @@ export default function CreateClassForm() {
         }
       }}
     >
-      <div className="rounded-3xl bg-white/6 p-6 ring-1 ring-white/10 backdrop-blur-xl">
+      <div className="rounded-3xl bg-[color:var(--app-surface)] p-6 ring-1 ring-[color:var(--app-border)] backdrop-blur-xl">
         <div className="grid gap-4 md:grid-cols-2">
           <label className="block">
-            <div className="text-xs font-medium text-zinc-200">Class name</div>
+            <div className="text-xs font-medium text-[color:var(--app-text)]">Class name</div>
             <input
               value={className}
               onChange={(e) => setClassName(e.target.value)}
               placeholder="e.g. BIO 201"
-              className="mt-2 w-full rounded-2xl bg-black/30 px-4 py-3 text-sm text-zinc-100 ring-1 ring-white/10 placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-cyan-300/40"
+              className="mt-2 w-full rounded-2xl bg-[color:var(--app-panel)] px-4 py-3 text-sm text-[color:var(--app-text)] ring-1 ring-[color:var(--app-border)] placeholder:text-[color:var(--app-muted)] focus:outline-none focus:ring-2 focus:ring-cyan-300/40"
             />
           </label>
 
           <label className="block">
-            <div className="text-xs font-medium text-zinc-200">Semester</div>
+            <div className="text-xs font-medium text-[color:var(--app-text)]">Semester</div>
             <input
               value={semester}
               onChange={(e) => setSemester(e.target.value)}
               placeholder="e.g. Spring 2026"
-              className="mt-2 w-full rounded-2xl bg-black/30 px-4 py-3 text-sm text-zinc-100 ring-1 ring-white/10 placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-cyan-300/40"
+              className="mt-2 w-full rounded-2xl bg-[color:var(--app-panel)] px-4 py-3 text-sm text-[color:var(--app-text)] ring-1 ring-[color:var(--app-border)] placeholder:text-[color:var(--app-muted)] focus:outline-none focus:ring-2 focus:ring-cyan-300/40"
             />
           </label>
         </div>
@@ -219,8 +284,8 @@ export default function CreateClassForm() {
         multiple
       />
 
-      <div className="rounded-3xl bg-white/6 p-5 text-xs text-zinc-400 ring-1 ring-white/10 backdrop-blur-xl">
-        <div className="text-xs font-medium text-zinc-200">Copyright notice</div>
+      <div className="rounded-3xl bg-[color:var(--app-surface)] p-5 text-xs text-[color:var(--app-subtle)] ring-1 ring-[color:var(--app-border)] backdrop-blur-xl">
+        <div className="text-xs font-medium text-[color:var(--app-text)]">Copyright notice</div>
         <p className="mt-2 leading-5">
           Upload only materials you own or have permission to use.
           We process files to extract text and aim to minimize retention of original uploads.
@@ -241,6 +306,15 @@ export default function CreateClassForm() {
       >
         {isSubmitting ? "Creating class..." : "Create class"}
       </button>
+
+      {classId && (
+        <SemesterWeekVerifier
+          classId={classId}
+          isOpen={showVerifier}
+          onClose={() => setShowVerifier(false)}
+          onVerify={handleVerifySemester}
+        />
+      )}
     </form>
   );
 }

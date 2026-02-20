@@ -66,3 +66,83 @@ export async function POST(req: Request) {
     );
   }
 }
+
+/**
+ * DELETE /api/classes
+ * Delete a class (and its documents) owned by the authenticated user
+ */
+export async function DELETE(req: Request) {
+  const session = await auth();
+  if (!session?.user?.id) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  try {
+    const body = await req.json();
+    const { id } = body as { id?: string };
+
+    if (!id) {
+      return NextResponse.json({ error: "Class id is required" }, { status: 400 });
+    }
+
+    const existing = await prisma.class.findUnique({ where: { id } });
+    if (!existing || existing.userId !== session.user.id) {
+      return NextResponse.json({ error: "Class not found" }, { status: 404 });
+    }
+
+    await prisma.class.delete({ where: { id } });
+
+    return NextResponse.json({ success: true });
+  } catch (error) {
+    console.error("[Classes] Error deleting class:", error);
+    return NextResponse.json(
+      { error: "Failed to delete class" },
+      { status: 500 }
+    );
+  }
+}
+
+/**
+ * PATCH /api/classes
+ * Update class semester and current week information
+ */
+export async function PATCH(req: Request) {
+  const session = await auth();
+  if (!session?.user?.id) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  try {
+    const body = await req.json();
+    const { classId, semester, currentWeek } = body as {
+      classId?: string;
+      semester?: string;
+      currentWeek?: number;
+    };
+
+    if (!classId) {
+      return NextResponse.json({ error: "Class id is required" }, { status: 400 });
+    }
+
+    const existing = await prisma.class.findUnique({ where: { id: classId } });
+    if (!existing || existing.userId !== session.user.id) {
+      return NextResponse.json({ error: "Class not found" }, { status: 404 });
+    }
+
+    const updated = await prisma.class.update({
+      where: { id: classId },
+      data: {
+        semester: semester !== undefined ? semester : existing.semester,
+        currentWeek: currentWeek !== undefined ? currentWeek : existing.currentWeek,
+      },
+    });
+
+    return NextResponse.json({ success: true, class: updated });
+  } catch (error) {
+    console.error("[Classes] Error updating class:", error);
+    return NextResponse.json(
+      { error: "Failed to update class" },
+      { status: 500 }
+    );
+  }
+}

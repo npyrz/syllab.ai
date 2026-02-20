@@ -121,20 +121,20 @@ export default function ClassDocumentList({
       })}
 
       {confirmId ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4">
-          <div className="w-full max-w-sm rounded-3xl bg-[color:var(--app-surface)] p-5 text-sm text-[color:var(--app-text)] ring-1 ring-[color:var(--app-border)] shadow-[var(--app-shadow)]">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4 backdrop-blur-sm">
+          <div className="w-full max-w-sm rounded-3xl bg-[color:var(--app-surface)] p-6 text-sm text-[color:var(--app-text)] ring-1 ring-[color:var(--app-border)] shadow-[0_24px_70px_rgba(0,0,0,0.45)]">
             <div className="text-base font-semibold text-[color:var(--app-text)]">
               Delete Document?
             </div>
             <div className="mt-2 text-xs text-[color:var(--app-subtle)]">
               This removes the document and its extracted text. This action cannot be undone.
             </div>
-            <div className="mt-4 flex items-center justify-end gap-2">
+            <div className="mt-5 flex items-center justify-end gap-3">
               <button
                 type="button"
                 onClick={() => setConfirmId(null)}
                 disabled={Boolean(pendingId)}
-                className="rounded-full bg-[color:var(--app-chip)] px-3 py-1.5 text-xs text-[color:var(--app-text)] ring-1 ring-[color:var(--app-border)] transition hover:bg-[color:var(--app-elevated)] disabled:opacity-50"
+                className="rounded-full bg-[color:var(--app-panel)] px-3.5 py-2 text-xs font-medium text-[color:var(--app-text)] ring-1 ring-[color:var(--app-border)] transition hover:bg-[color:var(--app-elevated)] disabled:opacity-50"
               >
                 Cancel
               </button>
@@ -142,7 +142,7 @@ export default function ClassDocumentList({
                 type="button"
                 onClick={() => handleDelete(confirmId)}
                 disabled={Boolean(pendingId)}
-                className="rounded-full bg-red-500/80 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-red-500 disabled:opacity-50"
+                className="rounded-full bg-red-500 px-3.5 py-2 text-xs font-semibold text-white shadow-[0_10px_30px_rgba(239,68,68,0.35)] transition hover:bg-red-500/90 disabled:opacity-50"
               >
                 {pendingId ? "Deleting..." : "Delete"}
               </button>

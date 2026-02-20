@@ -2,6 +2,85 @@ import { prisma } from '@/lib/prisma';
 import { extractText } from '@/lib/text-extraction';
 
 /**
+ * Extract weekly schedule from document text
+ * Identifies days of week and associated events
+ */
+function extractWeeklySchedule(text: string): Record<string, Array<{ label: string; time?: string }>> {
+  const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+  const schedule: Record<string, Array<{ label: string; time?: string }>> = {};
+
+  // Initialize empty arrays for each day
+  days.forEach(day => {
+    schedule[day] = [];
+  });
+
+  const lines = text.split(/\r?\n/).filter(line => line.trim());
+  
+  let currentDay: string | null = null;
+  
+  for (const line of lines) {
+    const trimmed = line.trim();
+    
+    // Check if line starts with a day of the week
+    const dayMatch = days.find(day => 
+      trimmed.toLowerCase().startsWith(day.toLowerCase())
+    );
+    
+    if (dayMatch) {
+      currentDay = dayMatch;
+      // Check if there's time info on the same line as the day
+      const timeMatch = trimmed.match(/(\d{1,2}:\d{2}\s*(?:AM|PM|am|pm))/);
+      if (timeMatch) {
+        const eventText = trimmed.replace(dayMatch, '').replace(timeMatch[0], '').trim();
+        if (eventText) {
+          schedule[currentDay].push({
+            label: eventText.replace(/^[-–—:]+/, '').trim(),
+            time: timeMatch[0]
+          });
+        }
+      }
+    } else if (currentDay && trimmed && trimmed.length > 3) {
+      // This line is likely an event for the current day
+      // Check for time patterns
+      const timeMatch = trimmed.match(/^(\d{1,2}:\d{2}\s*(?:AM|PM|am|pm))?[\s–—:-]*(.*)/);
+      
+      if (timeMatch) {
+        const time = timeMatch[1];
+        const eventLabel = timeMatch[2].trim();
+        
+        if (eventLabel && !eventLabel.match(/^(monday|tuesday|wednesday|thursday|friday|saturday|sunday)/i)) {
+          schedule[currentDay].push({
+            label: eventLabel,
+            time: time?.trim()
+          });
+        }
+      }
+    }
+  }
+
+  return schedule;
+}
+
+/**
+ * Extract deadline-related items from schedule document text
+ * Looks for keywords like "due", "deadline", "exam", "quiz", "test"
+ */
+function extractScheduleDeadlines(text: string): Array<{ line: string; hasDeadlineKeyword: boolean }> {
+  const deadlineKeywords = [
+    /\b(due|deadline|exam|quiz|test|midterm|final|project|submission|homework|assignment|paper|report)\b/i
+  ];
+  
+  const lines = text.split(/\r?\n/).filter(line => line.trim());
+  return lines
+    .filter(line => line.trim().length >= 6 && line.trim().length <= 150)
+    .map(line => ({
+      line: line.trim(),
+      hasDeadlineKeyword: deadlineKeywords.some(pattern => pattern.test(line))
+    }))
+    .filter(item => item.hasDeadlineKeyword);
+}
+
+/**
  * Process a document: extract text and update database
  * @param documentId - Document ID to process
  */
@@ -44,6 +123,16 @@ export async function processDocument(documentId: string): Promise<void> {
     );
     console.log(`[Worker] Text preview:\n${extractedText.substring(0, 500)}...\n`);
 
+    // If this is a schedule document, extract weekly schedule info
+    let weeklyInfo: string | undefined = undefined;
+    if (document.docType === 'schedule') {
+      const schedule = extractWeeklySchedule(extractedText);
+      // Only save if we found any schedule data
+      if (Object.values(schedule).some(day => day.length > 0)) {
+        weeklyInfo = JSON.stringify(schedule);
+      }
+    }
+
     // Update document with extracted text
     await prisma.document.update({
       where: { id: documentId },
@@ -52,6 +141,7 @@ export async function processDocument(documentId: string): Promise<void> {
         storageKey: null,
         status: 'done',
         processedAt: new Date(),
+        ...(weeklyInfo && { weeklyInfo }),
       },
     });
 
