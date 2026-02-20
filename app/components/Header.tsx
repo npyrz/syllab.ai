@@ -17,7 +17,7 @@ export default async function Header({ initialTheme }: HeaderProps) {
       <div className="flex h-16 w-full items-center border-b border-[color:var(--app-border)] px-4 sm:px-6">
         <div className="flex w-full items-center justify-between gap-6">
           <Link href="/" aria-label="Home" className="inline-flex items-center">
-            <LogoMark className="h-7 w-auto" />
+            <LogoMark className="h-16 w-auto" />
           </Link>
 
           <div className="flex items-center gap-4">

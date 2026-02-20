@@ -3,22 +3,18 @@
 import { useState } from "react";
 
 type SemesterWeekVerifierProps = {
-  classId: string;
   isOpen: boolean;
   onClose: () => void;
-  onVerify: (semester: string, currentWeek: number) => Promise<void>;
+  onVerify: (currentWeek: number) => Promise<void>;
 };
 
-const SEMESTERS = ["Spring", "Summer", "Fall", "Winter"];
 const WEEKS = Array.from({ length: 20 }, (_, i) => i + 1);
 
 export default function SemesterWeekVerifier({
-  classId,
   isOpen,
   onClose,
   onVerify,
 }: SemesterWeekVerifierProps) {
-  const [semester, setSemester] = useState("Spring");
   const [currentWeek, setCurrentWeek] = useState(1);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -31,17 +27,16 @@ export default function SemesterWeekVerifier({
     setError(null);
 
     try {
-      await onVerify(semester, currentWeek);
+      await onVerify(currentWeek);
       handleClose();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to verify semester");
+      setError(err instanceof Error ? err.message : "Failed to verify week");
     } finally {
       setIsSubmitting(false);
     }
   };
 
   const handleClose = () => {
-    setSemester("Spring");
     setCurrentWeek(1);
     setError(null);
     onClose();
@@ -51,30 +46,13 @@ export default function SemesterWeekVerifier({
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4 backdrop-blur-sm">
       <div className="w-full max-w-md rounded-3xl bg-[color:var(--app-surface)] p-6 text-sm text-[color:var(--app-text)] ring-1 ring-[color:var(--app-border)] shadow-[0_24px_70px_rgba(0,0,0,0.45)]">
         <div className="text-base font-semibold text-[color:var(--app-text)]">
-          Verify Semester & Week
+          Set Current Week
         </div>
         <div className="mt-2 text-xs text-[color:var(--app-subtle)]">
-          Help us match your schedule. Select the current semester and week number.
+          Which week of the semester are we in? This will be automatically updated every Sunday.
         </div>
 
         <div className="mt-5 space-y-4">
-          <div>
-            <label className="block text-xs font-medium text-[color:var(--app-text)]">
-              Current Semester
-            </label>
-            <select
-              value={semester}
-              onChange={(e) => setSemester(e.target.value)}
-              className="mt-2 w-full rounded-xl bg-[color:var(--app-panel)] px-3 py-2.5 text-xs text-[color:var(--app-text)] ring-1 ring-[color:var(--app-border)] focus:outline-none focus:ring-2 focus:ring-cyan-300"
-            >
-              {SEMESTERS.map((s) => (
-                <option key={s} value={s}>
-                  {s}
-                </option>
-              ))}
-            </select>
-          </div>
-
           <div>
             <label className="block text-xs font-medium text-[color:var(--app-text)]">
               Current Week (1-20)

@@ -133,18 +133,19 @@ export default function ClassDocumentUploader({ classId }: { classId: string }) 
         return;
       }
 
+      // Wait a moment for document text extraction to complete before refreshing
+      await new Promise(resolve => setTimeout(resolve, 1500));
       router.refresh();
     }
   };
 
-  const handleVerifySemester = async (semester: string, currentWeek: number) => {
+  const handleVerifySemester = async (currentWeek: number) => {
     try {
       const response = await fetch("/api/classes", {
         method: "PATCH",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           classId,
-          semester,
           currentWeek,
         }),
       });
@@ -155,6 +156,8 @@ export default function ClassDocumentUploader({ classId }: { classId: string }) 
       }
 
       setShowVerifier(false);
+      // Wait a moment for document text extraction to complete before refreshing
+      await new Promise(resolve => setTimeout(resolve, 1500));
       router.refresh();
     } catch (err) {
       throw err;
@@ -268,7 +271,6 @@ export default function ClassDocumentUploader({ classId }: { classId: string }) 
       </div>
 
       <SemesterWeekVerifier
-        classId={classId}
         isOpen={showVerifier}
         onClose={() => {
           setShowVerifier(false);

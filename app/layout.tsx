@@ -23,6 +23,13 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "Syllab.ai",
   description: "Your AI class management assistant.",
+  icons: {
+    icon: "/logo.png",
+    other: {
+      rel: "apple-touch-icon",
+      url: "/logo.png",
+    },
+  },
 };
 
 export default async function RootLayout({
