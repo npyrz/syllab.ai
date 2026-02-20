@@ -101,3 +101,48 @@ export async function DELETE(req: Request) {
     );
   }
 }
+
+/**
+ * PATCH /api/classes
+ * Update class semester and current week information
+ */
+export async function PATCH(req: Request) {
+  const session = await auth();
+  if (!session?.user?.id) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  try {
+    const body = await req.json();
+    const { classId, semester, currentWeek } = body as {
+      classId?: string;
+      semester?: string;
+      currentWeek?: number;
+    };
+
+    if (!classId) {
+      return NextResponse.json({ error: "Class id is required" }, { status: 400 });
+    }
+
+    const existing = await prisma.class.findUnique({ where: { id: classId } });
+    if (!existing || existing.userId !== session.user.id) {
+      return NextResponse.json({ error: "Class not found" }, { status: 404 });
+    }
+
+    const updated = await prisma.class.update({
+      where: { id: classId },
+      data: {
+        semester: semester !== undefined ? semester : existing.semester,
+        currentWeek: currentWeek !== undefined ? currentWeek : existing.currentWeek,
+      },
+    });
+
+    return NextResponse.json({ success: true, class: updated });
+  } catch (error) {
+    console.error("[Classes] Error updating class:", error);
+    return NextResponse.json(
+      { error: "Failed to update class" },
+      { status: 500 }
+    );
+  }
+}

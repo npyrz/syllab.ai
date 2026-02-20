@@ -10,6 +10,27 @@ const ALLOWED_TYPES = [
   'application/msword',
 ];
 
+function inferDocType(
+  filename: string,
+  requestedType?: string | null
+): 'syllabus' | 'schedule' | 'other' {
+  if (requestedType === 'syllabus' || requestedType === 'schedule' || requestedType === 'other') {
+    return requestedType;
+  }
+
+  const normalized = filename.toLowerCase();
+  if (normalized.includes('syllabus')) return 'syllabus';
+  if (
+    normalized.includes('schedule') ||
+    normalized.includes('calendar') ||
+    normalized.includes('week') ||
+    normalized.includes('timetable')
+  ) {
+    return 'schedule';
+  }
+  return 'other';
+}
+
 /**
  * GET /api/documents
  * Fetch all documents for the authenticated user
@@ -65,6 +86,7 @@ export async function POST(req: NextRequest) {
     const formData = await req.formData();
     const file = formData.get('file') as File;
     const classId = formData.get('classId') as string;
+    const requestedDocType = formData.get('docType')?.toString() ?? null;
 
     // Validate inputs
     if (!file) {
@@ -127,9 +149,17 @@ export async function POST(req: NextRequest) {
         mimeType: file.type,
         sizeBytes: file.size,
         storageKey: blob.url,
+        docType: inferDocType(file.name, requestedDocType),
         status: 'pending',
       },
     });
+
+    if (document.docType === 'schedule') {
+      await prisma.class.update({
+        where: { id: classId },
+        data: { scheduleId: document.id },
+      });
+    }
 
     console.log(`[Upload] Created document record: ${document.id}`);
 
@@ -149,6 +179,7 @@ export async function POST(req: NextRequest) {
         filename: true,
         mimeType: true,
         sizeBytes: true,
+        docType: true,
         status: true,
         createdAt: true,
         processedAt: true,
@@ -158,6 +189,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({
       success: true,
       document: updatedDocument,
+      classId,
     });
   } catch (error) {
     console.error('[Upload] Error:', error);

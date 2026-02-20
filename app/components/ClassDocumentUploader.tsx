@@ -2,18 +2,34 @@
 
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import SemesterWeekVerifier from "./SemesterWeekVerifier";
 
 type UploadResult = {
   name: string;
   ok: boolean;
   error?: string;
   key: string;
+  docType?: "syllabus" | "schedule" | "other";
 };
 
 function formatFileCount(files: File[]) {
   if (files.length === 0) return "No Files Selected";
   if (files.length === 1) return files[0].name;
   return `${files.length} Files Selected`;
+}
+
+function inferDocTypeFromFilename(file: File): "syllabus" | "schedule" | "other" {
+  const name = file.name.toLowerCase();
+  if (name.includes("syllabus")) return "syllabus";
+  if (
+    name.includes("schedule") ||
+    name.includes("calendar") ||
+    name.includes("week") ||
+    name.includes("timetable")
+  ) {
+    return "schedule";
+  }
+  return "other";
 }
 
 export default function ClassDocumentUploader({ classId }: { classId: string }) {
@@ -23,6 +39,7 @@ export default function ClassDocumentUploader({ classId }: { classId: string }) 
   const [results, setResults] = useState<UploadResult[]>([]);
   const [progress, setProgress] = useState<Record<string, number>>({});
   const [error, setError] = useState<string | null>(null);
+  const [showVerifier, setShowVerifier] = useState(false);
 
   const summary = useMemo(() => formatFileCount(files), [files]);
   const canSubmit = files.length > 0 && !isUploading;
@@ -32,6 +49,7 @@ export default function ClassDocumentUploader({ classId }: { classId: string }) 
       const formData = new FormData();
       formData.append("file", file);
       formData.append("classId", classId);
+      formData.append("docType", inferDocTypeFromFilename(file));
 
       const xhr = new XMLHttpRequest();
       xhr.open("POST", "/api/documents");
@@ -44,8 +62,15 @@ export default function ClassDocumentUploader({ classId }: { classId: string }) 
 
       xhr.addEventListener("load", () => {
         if (xhr.status >= 200 && xhr.status < 300) {
+          let docType: UploadResult["docType"];
+          try {
+            const payload = JSON.parse(xhr.responseText || "{}");
+            docType = payload?.document?.docType;
+          } catch {
+            docType = undefined;
+          }
           setProgress((prev) => ({ ...prev, [key]: 100 }));
-          resolve({ name: file.name, ok: true, key });
+          resolve({ name: file.name, ok: true, key, docType });
           return;
         }
 
@@ -81,7 +106,6 @@ export default function ClassDocumentUploader({ classId }: { classId: string }) 
     });
 
     const nextResults = await Promise.all(uploads);
-
     setResults(nextResults);
     setIsUploading(false);
 
@@ -89,14 +113,57 @@ export default function ClassDocumentUploader({ classId }: { classId: string }) 
     if (hasFailure) {
       setError("Some files failed to upload. Try again for those files.");
     } else {
+      const uploadedFiles = [...files];
       setFiles([]);
-    }
 
-    router.refresh();
+      const isScheduleUpload = nextResults.some(
+        (item) => item.ok && item.docType === "schedule"
+      ) || uploadedFiles.some((f) => {
+        const name = f.name.toLowerCase();
+        return (
+          name.includes("schedule") ||
+          name.includes("calendar") ||
+          name.includes("week") ||
+          name.includes("timetable")
+        );
+      });
+
+      if (isScheduleUpload) {
+        setShowVerifier(true);
+        return;
+      }
+
+      router.refresh();
+    }
+  };
+
+  const handleVerifySemester = async (semester: string, currentWeek: number) => {
+    try {
+      const response = await fetch("/api/classes", {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          classId,
+          semester,
+          currentWeek,
+        }),
+      });
+
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data?.error || "Failed to save semester info");
+      }
+
+      setShowVerifier(false);
+      router.refresh();
+    } catch (err) {
+      throw err;
+    }
   };
 
   return (
-    <div className="rounded-3xl bg-[color:var(--app-surface)] p-5 ring-1 ring-[color:var(--app-border)] shadow-[var(--app-shadow)]">
+    <>
+      <div className="rounded-3xl bg-[color:var(--app-surface)] p-5 ring-1 ring-[color:var(--app-border)] shadow-[var(--app-shadow)]">
       <div className="flex items-start justify-between gap-4">
         <div>
           <div className="text-sm font-semibold text-[color:var(--app-text)]">
@@ -198,6 +265,17 @@ export default function ClassDocumentUploader({ classId }: { classId: string }) 
           </ul>
         </div>
       ) : null}
-    </div>
+      </div>
+
+      <SemesterWeekVerifier
+        classId={classId}
+        isOpen={showVerifier}
+        onClose={() => {
+          setShowVerifier(false);
+          router.refresh();
+        }}
+        onVerify={handleVerifySemester}
+      />
+    </>
   );
 }

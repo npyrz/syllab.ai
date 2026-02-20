@@ -1,6 +1,8 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
+import SemesterWeekVerifier from "./SemesterWeekVerifier";
 
 type FileBucket = {
   files: File[];
@@ -10,6 +12,16 @@ function formatFileCount(files: File[]) {
   if (files.length === 0) return "No files selected";
   if (files.length === 1) return files[0].name;
   return `${files.length} files selected`;
+}
+
+function isScheduleLikeFilename(filename: string) {
+  const normalized = filename.toLowerCase();
+  return (
+    normalized.includes("schedule") ||
+    normalized.includes("calendar") ||
+    normalized.includes("week") ||
+    normalized.includes("timetable")
+  );
 }
 
 function Dropzone(props: {
@@ -94,6 +106,7 @@ function Dropzone(props: {
 }
 
 export default function CreateClassForm() {
+  const router = useRouter();
   const [className, setClassName] = useState("");
   const [semester, setSemester] = useState("");
 
@@ -103,8 +116,38 @@ export default function CreateClassForm() {
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  
+  const [showVerifier, setShowVerifier] = useState(false);
+  const [classId, setClassId] = useState<string | null>(null);
 
   const canSubmit = className.trim().length > 0 && semester.trim().length > 0 && !isSubmitting;
+
+  const handleVerifySemester = async (semesterValue: string, currentWeek: number) => {
+    if (!classId) return;
+    
+    try {
+      const response = await fetch("/api/classes", {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          classId,
+          semester: semesterValue,
+          currentWeek,
+        }),
+      });
+
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data?.error || "Failed to save semester info");
+      }
+
+      setShowVerifier(false);
+      window.location.assign("/home");
+    } catch (err) {
+      console.error("Error verifying semester:", err);
+      setError(err instanceof Error ? err.message : "Failed to save semester info");
+    }
+  };
 
   return (
     <form
@@ -137,15 +180,18 @@ export default function CreateClassForm() {
 
           // Step 2: Upload all files
           const allFiles = [
-            ...syllabus.files,
-            ...schedule.files,
-            ...misc.files,
+            ...syllabus.files.map((file) => ({ file, docType: "syllabus" as const })),
+            ...schedule.files.map((file) => ({ file, docType: "schedule" as const })),
+            ...misc.files.map((file) => ({ file, docType: "other" as const })),
           ];
 
-          for (const file of allFiles) {
+          let hasDetectedSchedule = false;
+
+          for (const item of allFiles) {
             const formData = new FormData();
-            formData.append("file", file);
+            formData.append("file", item.file);
             formData.append("classId", classId);
+            formData.append("docType", item.docType);
 
             const uploadResponse = await fetch("/api/documents", {
               method: "POST",
@@ -154,13 +200,32 @@ export default function CreateClassForm() {
 
             if (!uploadResponse.ok) {
               const errorData = await uploadResponse.json();
-              console.error(`Failed to upload ${file.name}:`, errorData);
+              console.error(`Failed to upload ${item.file.name}:`, errorData);
               // Continue with other files even if one fails
+              continue;
+            }
+
+            try {
+              const uploadData = await uploadResponse.json();
+              if (item.docType === "schedule" || uploadData?.document?.docType === "schedule") {
+                hasDetectedSchedule = true;
+              }
+            } catch {
+              if (item.docType === "schedule" || isScheduleLikeFilename(item.file.name)) {
+                hasDetectedSchedule = true;
+              }
             }
           }
 
-          // Step 3: Redirect to home
-          window.location.href = "/home";
+          // Step 3: If schedule documents were uploaded, show verifier
+          if (hasDetectedSchedule) {
+            setClassId(classId);
+            setShowVerifier(true);
+            setIsSubmitting(false);
+          } else {
+            // No schedule doc - redirect immediately
+            window.location.assign("/home");
+          }
         } catch (err) {
           console.error("Error creating class:", err);
           setError(err instanceof Error ? err.message : "Failed to create class");
@@ -241,6 +306,15 @@ export default function CreateClassForm() {
       >
         {isSubmitting ? "Creating class..." : "Create class"}
       </button>
+
+      {classId && (
+        <SemesterWeekVerifier
+          classId={classId}
+          isOpen={showVerifier}
+          onClose={() => setShowVerifier(false)}
+          onVerify={handleVerifySemester}
+        />
+      )}
     </form>
   );
 }
