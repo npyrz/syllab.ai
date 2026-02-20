@@ -20,18 +20,18 @@ export default async function SignInPage({ searchParams }: SignInPageProps) {
     !!process.env.AUTH_GOOGLE_ID && !!process.env.AUTH_GOOGLE_SECRET;
 
   return (
-    <div className="relative min-h-[calc(100vh-64px)] overflow-hidden bg-black">
+    <div className="relative min-h-[calc(100vh-64px)] overflow-hidden bg-[color:var(--app-bg)] text-[color:var(--app-text)]">
       <main className="relative mx-auto grid min-h-[calc(100vh-64px)] max-w-xl items-center px-6 py-20">
-        <section className="rounded-3xl bg-white/6 p-6 ring-1 ring-white/10 backdrop-blur-xl">
-          <h1 className="text-balance text-3xl font-normal tracking-tight text-zinc-50">
+        <section className="rounded-3xl bg-[color:var(--app-surface)] p-6 ring-1 ring-[color:var(--app-border)] backdrop-blur-xl">
+          <h1 className="text-balance text-3xl font-normal tracking-tight text-[color:var(--app-text)]">
             Sign in
           </h1>
-          <p className="mt-3 text-sm leading-6 text-zinc-400">
+          <p className="mt-3 text-sm leading-6 text-[color:var(--app-subtle)]">
             Use your account to log in to syllab.ai.
           </p>
 
           {sp.error ? (
-            <div className="mt-5 rounded-2xl bg-black/30 p-4 text-sm text-zinc-300 ring-1 ring-white/10">
+            <div className="mt-5 rounded-2xl bg-[color:var(--app-panel)] p-4 text-sm text-[color:var(--app-text)] ring-1 ring-[color:var(--app-border)]">
               We couldn’t sign you in. Please try again.
             </div>
           ) : null}
@@ -53,9 +53,9 @@ export default async function SignInPage({ searchParams }: SignInPageProps) {
             </form>
 
             <div className="my-2 flex items-center gap-3">
-              <div className="h-px flex-1 bg-white/10" />
-              <div className="text-xs text-zinc-400">or</div>
-              <div className="h-px flex-1 bg-white/10" />
+              <div className="h-px flex-1 bg-[color:var(--app-border)]" />
+              <div className="text-xs text-[color:var(--app-subtle)]">or</div>
+              <div className="h-px flex-1 bg-[color:var(--app-border)]" />
             </div>
 
             <form
@@ -77,25 +77,25 @@ export default async function SignInPage({ searchParams }: SignInPageProps) {
             >
               <TimezoneInput />
               <label className="flex flex-col gap-1">
-                <span className="text-xs text-zinc-400">Email</span>
+                <span className="text-xs text-[color:var(--app-subtle)]">Email</span>
                 <input
                   name="email"
                   type="email"
                   required
                   autoComplete="email"
-                  className="h-11 rounded-xl bg-black/30 px-4 text-sm text-zinc-100 ring-1 ring-white/10 placeholder:text-zinc-500 focus:outline-none focus:ring-white/20"
+                  className="h-11 rounded-xl bg-[color:var(--app-panel)] px-4 text-sm text-[color:var(--app-text)] ring-1 ring-[color:var(--app-border)] placeholder:text-[color:var(--app-muted)] focus:outline-none focus:ring-[color:var(--app-subtle)]"
                   placeholder="you@example.com"
                 />
               </label>
 
               <label className="flex flex-col gap-1">
-                <span className="text-xs text-zinc-400">Password</span>
+                <span className="text-xs text-[color:var(--app-subtle)]">Password</span>
                 <input
                   name="password"
                   type="password"
                   required
                   autoComplete="current-password"
-                  className="h-11 rounded-xl bg-black/30 px-4 text-sm text-zinc-100 ring-1 ring-white/10 placeholder:text-zinc-500 focus:outline-none focus:ring-white/20"
+                  className="h-11 rounded-xl bg-[color:var(--app-panel)] px-4 text-sm text-[color:var(--app-text)] ring-1 ring-[color:var(--app-border)] placeholder:text-[color:var(--app-muted)] focus:outline-none focus:ring-[color:var(--app-subtle)]"
                   placeholder="••••••••"
                 />
               </label>
@@ -108,11 +108,11 @@ export default async function SignInPage({ searchParams }: SignInPageProps) {
               </button>
             </form>
 
-            <div className="pt-1 text-center text-sm text-zinc-400">
+            <div className="pt-1 text-center text-sm text-[color:var(--app-subtle)]">
               Don’t have an account?{" "}
               <Link
                 href={`/signup?callbackUrl=${encodeURIComponent(callbackUrl)}`}
-                className="text-zinc-100 hover:underline"
+                className="text-[color:var(--app-text)] hover:underline"
               >
                 Sign up
               </Link>

@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { notFound, redirect } from "next/navigation";
 import ClassDocumentUploader from "@/app/components/ClassDocumentUploader";
 import ClassDocumentList from "@/app/components/ClassDocumentList";
+import ClassDeleteButton from "@/app/components/ClassDeleteButton";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -316,15 +317,21 @@ export default async function ClassDetailPage({
   return (
     <div className="relative min-h-[calc(100vh-64px)] bg-[color:var(--app-bg)]">
       <main className="mx-auto w-full max-w-5xl px-6 py-12">
-        <div className="flex flex-col gap-2">
-          <h1 className="text-balance text-3xl font-normal tracking-tight text-[color:var(--app-text)]">
-            {classRecord.title}
-          </h1>
-          {classRecord.description ? (
-            <p className="text-sm text-[color:var(--app-subtle)]">
-              {classRecord.description}
-            </p>
-          ) : null}
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div className="flex flex-col gap-2">
+            <h1 className="text-balance text-3xl font-normal tracking-tight text-[color:var(--app-text)]">
+              {classRecord.title}
+            </h1>
+            {classRecord.description ? (
+              <p className="text-sm text-[color:var(--app-subtle)]">
+                {classRecord.description}
+              </p>
+            ) : null}
+          </div>
+          <ClassDeleteButton
+            classId={classRecord.id}
+            classTitle={classRecord.title}
+          />
         </div>
 
         {highlights.length ? (

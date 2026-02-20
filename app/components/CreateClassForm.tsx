@@ -26,21 +26,21 @@ function Dropzone(props: {
   const summary = useMemo(() => formatFileCount(bucket.files), [bucket.files]);
 
   return (
-    <div className="rounded-3xl bg-white/6 p-5 ring-1 ring-white/10 backdrop-blur-xl">
+    <div className="rounded-3xl bg-[color:var(--app-surface)] p-5 ring-1 ring-[color:var(--app-border)] backdrop-blur-xl">
       <div className="flex items-start justify-between gap-4">
         <div>
-          <div className="text-sm font-semibold text-zinc-50">{title}</div>
-          <div className="mt-1 text-xs text-zinc-400">{helper}</div>
+          <div className="text-sm font-semibold text-[color:var(--app-text)]">{title}</div>
+          <div className="mt-1 text-xs text-[color:var(--app-subtle)]">{helper}</div>
         </div>
-        <div className="text-xs text-zinc-400">{summary}</div>
+        <div className="text-xs text-[color:var(--app-subtle)]">{summary}</div>
       </div>
 
       <label
         className={
-          "mt-4 block cursor-pointer rounded-2xl border border-dashed p-6 text-center text-sm text-zinc-300 transition " +
+          "mt-4 block cursor-pointer rounded-2xl border border-dashed p-6 text-center text-sm text-[color:var(--app-text)] transition " +
           (dragOver
             ? "border-cyan-300/60 bg-cyan-300/10"
-            : "border-white/15 bg-black/30 hover:border-white/25")
+            : "border-[color:var(--app-border)] bg-[color:var(--app-panel)] hover:border-[color:var(--app-subtle)]")
         }
         onDragEnter={() => setDragOver(true)}
         onDragLeave={() => setDragOver(false)}
@@ -66,16 +66,16 @@ function Dropzone(props: {
             setBucket({ files: multiple ? incoming : incoming.slice(0, 1) });
           }}
         />
-        <div className="font-medium text-zinc-200">
+        <div className="font-medium text-[color:var(--app-text)]">
           Drag and drop files here
         </div>
-        <div className="mt-1 text-xs text-zinc-400">or click to browse</div>
+        <div className="mt-1 text-xs text-[color:var(--app-subtle)]">or click to browse</div>
       </label>
 
       {bucket.files.length ? (
-        <div className="mt-4 rounded-2xl bg-black/30 p-4 ring-1 ring-white/10">
-          <div className="text-xs font-medium text-zinc-200">Selected</div>
-          <ul className="mt-2 space-y-1 text-xs text-zinc-400">
+        <div className="mt-4 rounded-2xl bg-[color:var(--app-panel)] p-4 ring-1 ring-[color:var(--app-border)]">
+          <div className="text-xs font-medium text-[color:var(--app-text)]">Selected</div>
+          <ul className="mt-2 space-y-1 text-xs text-[color:var(--app-subtle)]">
             {bucket.files.map((file) => (
               <li key={`${file.name}-${file.size}`}>{file.name}</li>
             ))}
@@ -168,25 +168,25 @@ export default function CreateClassForm() {
         }
       }}
     >
-      <div className="rounded-3xl bg-white/6 p-6 ring-1 ring-white/10 backdrop-blur-xl">
+      <div className="rounded-3xl bg-[color:var(--app-surface)] p-6 ring-1 ring-[color:var(--app-border)] backdrop-blur-xl">
         <div className="grid gap-4 md:grid-cols-2">
           <label className="block">
-            <div className="text-xs font-medium text-zinc-200">Class name</div>
+            <div className="text-xs font-medium text-[color:var(--app-text)]">Class name</div>
             <input
               value={className}
               onChange={(e) => setClassName(e.target.value)}
               placeholder="e.g. BIO 201"
-              className="mt-2 w-full rounded-2xl bg-black/30 px-4 py-3 text-sm text-zinc-100 ring-1 ring-white/10 placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-cyan-300/40"
+              className="mt-2 w-full rounded-2xl bg-[color:var(--app-panel)] px-4 py-3 text-sm text-[color:var(--app-text)] ring-1 ring-[color:var(--app-border)] placeholder:text-[color:var(--app-muted)] focus:outline-none focus:ring-2 focus:ring-cyan-300/40"
             />
           </label>
 
           <label className="block">
-            <div className="text-xs font-medium text-zinc-200">Semester</div>
+            <div className="text-xs font-medium text-[color:var(--app-text)]">Semester</div>
             <input
               value={semester}
               onChange={(e) => setSemester(e.target.value)}
               placeholder="e.g. Spring 2026"
-              className="mt-2 w-full rounded-2xl bg-black/30 px-4 py-3 text-sm text-zinc-100 ring-1 ring-white/10 placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-cyan-300/40"
+              className="mt-2 w-full rounded-2xl bg-[color:var(--app-panel)] px-4 py-3 text-sm text-[color:var(--app-text)] ring-1 ring-[color:var(--app-border)] placeholder:text-[color:var(--app-muted)] focus:outline-none focus:ring-2 focus:ring-cyan-300/40"
             />
           </label>
         </div>
@@ -219,8 +219,8 @@ export default function CreateClassForm() {
         multiple
       />
 
-      <div className="rounded-3xl bg-white/6 p-5 text-xs text-zinc-400 ring-1 ring-white/10 backdrop-blur-xl">
-        <div className="text-xs font-medium text-zinc-200">Copyright notice</div>
+      <div className="rounded-3xl bg-[color:var(--app-surface)] p-5 text-xs text-[color:var(--app-subtle)] ring-1 ring-[color:var(--app-border)] backdrop-blur-xl">
+        <div className="text-xs font-medium text-[color:var(--app-text)]">Copyright notice</div>
         <p className="mt-2 leading-5">
           Upload only materials you own or have permission to use.
           We process files to extract text and aim to minimize retention of original uploads.

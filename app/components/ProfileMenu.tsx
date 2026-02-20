@@ -51,10 +51,10 @@ export default function ProfileMenu({ user }: ProfileMenuProps) {
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
         aria-controls={panelId}
-        className="inline-flex h-10 w-10 items-center justify-center overflow-hidden rounded-full ring-1 ring-white/10 transition hover:ring-white/20"
+        className="inline-flex h-10 w-10 items-center justify-center overflow-hidden rounded-full bg-[color:var(--app-surface)] text-[color:var(--app-text)] ring-1 ring-[color:var(--app-border)] transition hover:bg-[color:var(--app-elevated)]"
         title={title}
       >
-        <span className="text-sm font-semibold text-zinc-200">
+        <span className="text-sm font-semibold">
           {getInitials(user?.name ?? user?.email)}
         </span>
       </button>
@@ -72,34 +72,34 @@ export default function ProfileMenu({ user }: ProfileMenuProps) {
             id={panelId}
             role="dialog"
             aria-label="Profile menu"
-            className="fixed right-4 top-20 z-50 w-[320px] rounded-3xl bg-white/6 p-5 ring-1 ring-white/10 backdrop-blur-xl"
+            className="fixed right-4 top-20 z-50 w-[320px] rounded-3xl bg-[color:var(--app-surface)] p-5 ring-1 ring-[color:var(--app-border)] backdrop-blur-xl"
           >
             <div className="flex items-start gap-3">
-              <div className="h-12 w-12 overflow-hidden rounded-full bg-black/30 ring-1 ring-white/10">
-                <div className="flex h-full w-full items-center justify-center text-sm font-semibold text-zinc-200">
+              <div className="h-12 w-12 overflow-hidden rounded-full bg-[color:var(--app-panel)] ring-1 ring-[color:var(--app-border)]">
+                <div className="flex h-full w-full items-center justify-center text-sm font-semibold text-[color:var(--app-text)]">
                   {getInitials(user?.name ?? user?.email)}
                 </div>
               </div>
 
               <div className="min-w-0">
-                <div className="truncate text-sm font-semibold text-zinc-50">
+                <div className="truncate text-sm font-semibold text-[color:var(--app-text)]">
                   {title}
                 </div>
                 {subtitle ? (
-                  <div className="truncate text-xs text-zinc-400">{subtitle}</div>
+                  <div className="truncate text-xs text-[color:var(--app-subtle)]">{subtitle}</div>
                 ) : null}
               </div>
             </div>
 
-            <div className="mt-5 rounded-2xl bg-black/30 p-4 ring-1 ring-white/10">
-              <div className="text-xs font-medium text-zinc-200">Profile</div>
-              <div className="mt-2 text-xs text-zinc-400">
+            <div className="mt-5 rounded-2xl bg-[color:var(--app-panel)] p-4 ring-1 ring-[color:var(--app-border)]">
+              <div className="text-xs font-medium text-[color:var(--app-text)]">Profile</div>
+              <div className="mt-2 text-xs text-[color:var(--app-subtle)]">
                 Signed in{user?.email ? ` as ${user.email}` : "."}
               </div>
             </div>
 
-            <div className="mt-3 rounded-2xl bg-black/30 p-4 ring-1 ring-white/10">
-              <div className="text-xs font-medium text-zinc-200">Settings</div>
+            <div className="mt-3 rounded-2xl bg-[color:var(--app-panel)] p-4 ring-1 ring-[color:var(--app-border)]">
+              <div className="text-xs font-medium text-[color:var(--app-text)]">Settings</div>
               <form action={signOutAction} className="mt-3">
                 <button
                   type="submit"
