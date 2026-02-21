@@ -1,5 +1,5 @@
 import mammoth from 'mammoth';
-import pdfParse from 'pdf-parse';
+import { PDFParse } from 'pdf-parse';
 
 /**
  * Extract text from PDF or DOCX files
@@ -39,7 +39,8 @@ export async function extractText(
  * @returns Extracted text content
  */
 async function extractPdfText(buffer: Buffer): Promise<string> {
-  const result = await pdfParse(buffer);
+  const parser = new PDFParse({ data: buffer });
+  const result = await parser.getText();
   return cleanText(result.text || '');
 }
 
