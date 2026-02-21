@@ -1,6 +1,16 @@
 import mammoth from 'mammoth';
 import { PDFParse } from 'pdf-parse';
 
+// Polyfill DOMMatrix for Node.js (pdfjs-dist requires it)
+if (typeof globalThis !== 'undefined' && !globalThis.DOMMatrix) {
+  globalThis.DOMMatrix = class DOMMatrix {
+    constructor(public values: number[] = []) {}
+    static fromMatrix() { return new DOMMatrix(); }
+    static fromFloat32Array() { return new DOMMatrix(); }
+    static fromFloat64Array() { return new DOMMatrix(); }
+  } as any;
+}
+
 /**
  * Extract text from PDF or DOCX files
  * @param buffer - File contents
