@@ -1,6 +1,5 @@
 import mammoth from 'mammoth';
-import path from 'path';
-import { pathToFileURL } from 'url';
+import pdfParse from 'pdf-parse';
 
 /**
  * Extract text from PDF or DOCX files
@@ -35,42 +34,13 @@ export async function extractText(
 }
 
 /**
- * Extract text from PDF using pdfjs-dist
+ * Extract text from PDF using pdf-parse (Node-safe)
  * @param buffer - PDF file buffer
  * @returns Extracted text content
  */
 async function extractPdfText(buffer: Buffer): Promise<string> {
-  const pdfjsLib = await import('pdfjs-dist/legacy/build/pdf.mjs');
-
-  if (pdfjsLib.GlobalWorkerOptions) {
-    const workerPath = path.join(
-      process.cwd(),
-      'node_modules',
-      'pdfjs-dist',
-      'legacy',
-      'build',
-      'pdf.worker.mjs'
-    );
-    pdfjsLib.GlobalWorkerOptions.workerSrc = pathToFileURL(workerPath).toString();
-  }
-
-  const loadingTask = (pdfjsLib as any).getDocument({
-    data: new Uint8Array(buffer),
-    disableWorker: true,
-  });
-  const pdf = await loadingTask.promise;
-  let text = '';
-
-  for (let i = 0; i < pdf.numPages; i++) {
-    const page = await pdf.getPage(i + 1);
-    const textContent = await page.getTextContent();
-    const pageText = textContent.items
-      .map((item: any) => item.str)
-      .join('');
-    text += pageText + '\n';
-  }
-
-  return cleanText(text);
+  const result = await pdfParse(buffer);
+  return cleanText(result.text || '');
 }
 
 /**
