@@ -34,6 +34,7 @@ export default function ClassDocumentList({
   const [pendingId, setPendingId] = useState<string | null>(null);
   const [confirmId, setConfirmId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [retryingId, setRetryingId] = useState<string | null>(null);
 
   const hasItems = items.length > 0;
 
@@ -74,6 +75,38 @@ export default function ClassDocumentList({
     }
   };
 
+  const handleRetryProcessing = async (id: string) => {
+    if (retryingId) return;
+    setRetryingId(id);
+    setError(null);
+
+    try {
+      const response = await fetch("/api/documents/retry-processing", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ documentId: id }),
+      });
+
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data?.error || "Failed to retry processing");
+      }
+
+      // Update the item status to processing
+      setItems((prev) =>
+        prev.map((item) =>
+          item.id === id ? { ...item, status: "processing" } : item
+        )
+      );
+      
+      router.refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to retry processing");
+    } finally {
+      setRetryingId(null);
+    }
+  };
+
   if (!hasItems) {
     return (
       <div className="rounded-2xl bg-[color:var(--app-surface)] p-6 text-sm text-[color:var(--app-subtle)] ring-1 ring-[color:var(--app-border)]">
@@ -84,6 +117,18 @@ export default function ClassDocumentList({
 
   return (
     <div className="grid gap-3">
+      {error && (
+        <div className="rounded-2xl bg-red-500/10 p-4 text-sm text-red-400 ring-1 ring-red-500/20">
+          {error}
+          <button
+            type="button"
+            onClick={() => setError(null)}
+            className="ml-2 text-red-300 hover:text-red-200"
+          >
+            ✕
+          </button>
+        </div>
+      )}
       {orderedItems.map((doc) => {
         const created = formatDate(doc.createdAt);
         const processed = formatDate(doc.processedAt);
@@ -106,6 +151,16 @@ export default function ClassDocumentList({
                 <div className="text-xs text-[color:var(--app-subtle)]">
                   {formatStatus(doc.status)}
                 </div>
+                {(doc.status === "pending" || doc.status === "failed") && (
+                  <button
+                    type="button"
+                    onClick={() => handleRetryProcessing(doc.id)}
+                    disabled={retryingId === doc.id}
+                    className="rounded-full bg-[color:var(--app-chip)] px-2.5 py-1 text-[11px] text-[color:var(--app-text)] ring-1 ring-[color:var(--app-border)] transition hover:bg-[color:var(--app-elevated)] disabled:opacity-50"
+                  >
+                    {retryingId === doc.id ? "Processing..." : "Retry"}
+                  </button>
+                )}
                 <button
                   type="button"
                   onClick={() => setConfirmId(doc.id)}

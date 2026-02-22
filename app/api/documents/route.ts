@@ -3,6 +3,8 @@ import { auth } from '@/auth';
 import { prisma } from '@/lib/prisma';
 import { put } from '@vercel/blob';
 import { processDocument } from '@/lib/document-processor';
+import { mkdir, writeFile } from 'node:fs/promises';
+import path from 'node:path';
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
 const ALLOWED_TYPES = [
   'application/pdf',
@@ -130,15 +132,25 @@ export async function POST(req: NextRequest) {
     const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
     const blobName = `users/${session.user.id}/classes/${classId}/${timestamp}_${safeName}`;
 
-    // Upload to Vercel Blob
+    // Upload to Vercel Blob (or local filesystem fallback in development)
     const bytes = await file.arrayBuffer();
     const buffer = Buffer.from(bytes);
-    const blob = await put(blobName, buffer, {
-      access: 'public',
-      contentType: file.type,
-    });
-
-    console.log(`[Upload] Stored blob: ${blob.url}`);
+    let storageKey: string;
+    if (process.env.BLOB_READ_WRITE_TOKEN) {
+      const blob = await put(blobName, buffer, {
+        access: 'public',
+        contentType: file.type,
+      });
+      storageKey = blob.url;
+      console.log(`[Upload] Stored blob: ${storageKey}`);
+    } else {
+      const relativePath = blobName.replace(/\\/g, '/');
+      const absolutePath = path.join(process.cwd(), 'uploads', relativePath);
+      await mkdir(path.dirname(absolutePath), { recursive: true });
+      await writeFile(absolutePath, buffer);
+      storageKey = `local://${relativePath}`;
+      console.log(`[Upload] Stored local file: ${storageKey}`);
+    }
 
     // Create document record
     const document = await prisma.document.create({
@@ -148,7 +160,7 @@ export async function POST(req: NextRequest) {
         filename: file.name,
         mimeType: file.type,
         sizeBytes: file.size,
-        storageKey: blob.url,
+        storageKey,
         docType: inferDocType(file.name, requestedDocType),
         status: 'pending',
       },
@@ -163,12 +175,18 @@ export async function POST(req: NextRequest) {
 
     console.log(`[Upload] Created document record: ${document.id}`);
 
-    // Process document in "background" (for now, synchronously)
-    // In production, you'd use a queue like BullMQ or trigger a serverless function
-    try {
-      await processDocument(document.id);
-    } catch (error) {
-      console.error('[Upload] Processing failed, but document was saved:', error);
+    // Queue document for background processing (via Cron job)
+    // The document is now in 'pending' status and will be processed by the /api/cron/process-documents endpoint
+    console.log(`[Upload] Document queued for background processing`);
+    
+    // Optionally trigger processing immediately in development
+    if (process.env.NODE_ENV !== 'production') {
+      try {
+        await processDocument(document.id);
+      } catch (error) {
+        console.error('[Upload] Background processing failed (dev mode):', error);
+        // In dev, we still want to let the upload succeed even if processing fails
+      }
     }
 
     // Fetch updated document

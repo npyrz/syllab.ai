@@ -1,5 +1,7 @@
 import { prisma } from '@/lib/prisma';
 import { extractText } from '@/lib/text-extraction';
+import { readFile } from 'node:fs/promises';
+import path from 'node:path';
 
 /**
  * Extract weekly schedule from document text
@@ -109,13 +111,19 @@ export async function processDocument(documentId: string): Promise<void> {
       throw new Error('Storage key is missing for this document');
     }
 
-    // Extract text from the blob
-    const response = await fetch(document.storageKey);
-    if (!response.ok) {
-      throw new Error(`Failed to download blob: ${response.status}`);
+    let buffer: Buffer;
+    if (document.storageKey.startsWith('local://')) {
+      const relativePath = document.storageKey.replace('local://', '');
+      const absolutePath = path.join(process.cwd(), 'uploads', relativePath);
+      buffer = await readFile(absolutePath);
+    } else {
+      const response = await fetch(document.storageKey);
+      if (!response.ok) {
+        throw new Error(`Failed to download blob: ${response.status}`);
+      }
+      const arrayBuffer = await response.arrayBuffer();
+      buffer = Buffer.from(arrayBuffer);
     }
-    const arrayBuffer = await response.arrayBuffer();
-    const buffer = Buffer.from(arrayBuffer);
     const extractedText = await extractText(buffer, document.mimeType);
 
     console.log(

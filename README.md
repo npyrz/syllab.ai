@@ -51,6 +51,9 @@ Add these to `.env.local`:
 - `AUTH_GOOGLE_ID` (optional, enables Google login)
 - `AUTH_GOOGLE_SECRET` (optional, enables Google login)
 - `GROQ_API_KEY` (Groq model access)
+- `BLOB_READ_WRITE_TOKEN` (optional; required to use Vercel Blob storage)
+
+When `BLOB_READ_WRITE_TOKEN` is not set (common in localhost dev), document uploads are stored in the local `uploads/` directory automatically.
 
 ### Prisma
 
