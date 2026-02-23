@@ -5,6 +5,7 @@ import TimezoneInput from "@/app/components/TimezoneInput";
 import { prisma } from "@/lib/prisma";
 import { hashPassword } from "@/lib/password";
 import { redirect } from "next/navigation";
+import { AuthError } from "next-auth";
 
 type SignUpPageProps = {
   searchParams?: Promise<{
@@ -95,12 +96,21 @@ export default async function SignUpPage({ searchParams }: SignUpPageProps) {
                 },
               });
 
-              await signIn("credentials", {
-                email,
-                password,
-                redirectTo: callbackUrl,
-                timezone: timeZone,
-              });
+              try {
+                await signIn("credentials", {
+                  email,
+                  password,
+                  redirectTo: callbackUrl,
+                  timezone: timeZone,
+                });
+              } catch (error) {
+                if (error instanceof AuthError && error.type === "CredentialsSignin") {
+                  redirect(
+                    `/signin?error=CredentialsSignin&callbackUrl=${encodeURIComponent(callbackUrl)}`
+                  );
+                }
+                throw error;
+              }
             }}
             className="mt-6 flex flex-col gap-3"
           >

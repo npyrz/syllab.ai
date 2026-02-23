@@ -2,6 +2,7 @@ import { auth, signIn } from "@/auth";
 import TimezoneInput from "@/app/components/TimezoneInput";
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { AuthError } from "next-auth";
 
 type SignInPageProps = {
   searchParams?: Promise<{
@@ -66,12 +67,21 @@ export default async function SignInPage({ searchParams }: SignInPageProps) {
                   .toLowerCase();
                 const password = String(formData.get("password") ?? "");
                 const timezone = String(formData.get("timezone") ?? "").trim();
-                await signIn("credentials", {
-                  email,
-                  password,
-                  redirectTo: callbackUrl,
-                  timezone,
-                });
+                try {
+                  await signIn("credentials", {
+                    email,
+                    password,
+                    redirectTo: callbackUrl,
+                    timezone,
+                  });
+                } catch (error) {
+                  if (error instanceof AuthError && error.type === "CredentialsSignin") {
+                    redirect(
+                      `/signin?error=CredentialsSignin&callbackUrl=${encodeURIComponent(callbackUrl)}`
+                    );
+                  }
+                  throw error;
+                }
               }}
               className="flex flex-col gap-3"
             >
