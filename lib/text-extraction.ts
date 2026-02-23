@@ -59,13 +59,14 @@ export async function extractText(
  * @returns Extracted text content
  */
 async function extractPdfText(buffer: Buffer): Promise<string> {
+  let parserDestroy: (() => Promise<void>) | null = null;
   try {
     // Dynamic import AFTER polyfill is set up
-    const pdfParse = await import('pdf-parse');
-    const PDFParse = pdfParse.default || pdfParse;
-    
-    // pdf-parse expects the buffer directly as first argument
-    const result = await PDFParse(buffer);
+    const { PDFParse } = await import('pdf-parse');
+    const parser = new PDFParse({ data: buffer });
+    parserDestroy = () => parser.destroy();
+
+    const result = await parser.getText();
     
     // Extract text from all pages
     const text = result.text || '';
@@ -78,6 +79,8 @@ async function extractPdfText(buffer: Buffer): Promise<string> {
     const errorMsg = error instanceof Error ? error.message : String(error);
     console.error('[PDF Extract] Error:', errorMsg);
     throw new Error(`PDF text extraction failed: ${errorMsg}`);
+  } finally {
+    await parserDestroy?.();
   }
 }
 
