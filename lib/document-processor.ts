@@ -105,7 +105,7 @@ export async function processDocument(documentId: string): Promise<void> {
       throw new Error('Document not found');
     }
 
-    console.log(`[Worker] Extracting text from: ${document.filename}`);
+    console.log(`[Worker] Extracting text from: ${document.filename} (${document.mimeType})`);
 
     if (!document.storageKey) {
       throw new Error('Storage key is missing for this document');
@@ -115,21 +115,29 @@ export async function processDocument(documentId: string): Promise<void> {
     if (document.storageKey.startsWith('local://')) {
       const relativePath = document.storageKey.replace('local://', '');
       const absolutePath = path.join(process.cwd(), 'uploads', relativePath);
+      console.log(`[Worker] Reading local file: ${absolutePath}`);
       buffer = await readFile(absolutePath);
     } else {
+      console.log(`[Worker] Downloading from blob: ${document.storageKey.substring(0, 50)}...`);
       const response = await fetch(document.storageKey);
       if (!response.ok) {
-        throw new Error(`Failed to download blob: ${response.status}`);
+        throw new Error(`Failed to download blob: ${response.status} ${response.statusText}`);
       }
       const arrayBuffer = await response.arrayBuffer();
       buffer = Buffer.from(arrayBuffer);
     }
+    
+    console.log(`[Worker] Downloaded ${buffer.length} bytes, extracting text...`);
     const extractedText = await extractText(buffer, document.mimeType);
+
+    if (!extractedText || extractedText.trim().length === 0) {
+      throw new Error('Text extraction resulted in empty content');
+    }
 
     console.log(
       `[Worker] Extracted ${extractedText.length} characters from ${document.filename}`
     );
-    console.log(`[Worker] Text preview:\n${extractedText.substring(0, 500)}...\n`);
+    console.log(`[Worker] Text preview:\n${extractedText.substring(0, 300)}...\n`);
 
     // If this is a schedule document, extract weekly schedule info
     let weeklyInfo: string | undefined = undefined;
@@ -155,7 +163,8 @@ export async function processDocument(documentId: string): Promise<void> {
 
     console.log(`[Worker] Successfully processed document: ${documentId}`);
   } catch (error) {
-    console.error(`[Worker] Error processing document ${documentId}:`, error);
+    const errorMsg = error instanceof Error ? error.message : String(error);
+    console.error(`[Worker] Error processing document ${documentId}: ${errorMsg}`);
 
     // Update status to failed
     await prisma.document.update({

@@ -5,15 +5,15 @@ import { processDocument } from '@/lib/document-processor';
 /**
  * GET /api/cron/process-documents
  * Background job to process pending documents
- * This endpoint is designed to be called by Vercel Cron or external services
- * It processes all pending documents that haven't been processed yet
+ * Can be called by external services, manual triggers, or self-ping mechanism
  */
 export async function GET(req: NextRequest) {
-  // Verify request is from Vercel Cron (optional but recommended for security)
+  // Verify request security
   const authHeader = req.headers.get('authorization');
   const cronSecret = process.env.CRON_SECRET;
+  const expectedAuth = cronSecret ? `Bearer ${cronSecret}` : `Bearer development`;
   
-  if (cronSecret && authHeader !== `Bearer ${cronSecret}`) {
+  if (authHeader !== expectedAuth) {
     return NextResponse.json(
       { error: 'Unauthorized' },
       { status: 401 }

@@ -175,17 +175,32 @@ export async function POST(req: NextRequest) {
 
     console.log(`[Upload] Created document record: ${document.id}`);
 
-    // Queue document for background processing (via Cron job)
-    // The document is now in 'pending' status and will be processed by the /api/cron/process-documents endpoint
-    console.log(`[Upload] Document queued for background processing`);
-    
-    // Optionally trigger processing immediately in development
-    if (process.env.NODE_ENV !== 'production') {
+    // Queue document for background processing
+    // Use fire-and-forget async processing via fetch to avoid blocking
+    if (process.env.VERCEL_ENV === 'production') {
+      // In production, trigger processing asynchronously without waiting
+      // This ensures the upload endpoint returns quickly while processing happens in background
+      const baseUrl = req.headers.get('x-forwarded-proto') && req.headers.get('x-forwarded-host')
+        ? `${req.headers.get('x-forwarded-proto')}://${req.headers.get('x-forwarded-host')}`
+        : `${req.nextUrl.protocol}//${req.nextUrl.host}`;
+      
+      fetch(`${baseUrl}/api/cron/process-documents`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${process.env.CRON_SECRET || 'development'}`,
+        },
+      }).catch((err) => {
+        console.error('[Upload] Failed to queue background processing:', err);
+      });
+      
+      console.log(`[Upload] Document queued for async background processing`);
+    } else {
+      // In development, process synchronously for testing
       try {
         await processDocument(document.id);
       } catch (error) {
         console.error('[Upload] Background processing failed (dev mode):', error);
-        // In dev, we still want to let the upload succeed even if processing fails
       }
     }
 

@@ -59,11 +59,26 @@ export async function extractText(
  * @returns Extracted text content
  */
 async function extractPdfText(buffer: Buffer): Promise<string> {
-  // Dynamic import AFTER polyfill is set up
-  const { PDFParse } = await import('pdf-parse');
-  const parser = new PDFParse({ data: buffer });
-  const result = await parser.getText();
-  return cleanText(result.text || '');
+  try {
+    // Dynamic import AFTER polyfill is set up
+    const pdfParse = await import('pdf-parse');
+    const PDFParse = pdfParse.default || pdfParse;
+    
+    // pdf-parse expects the buffer directly as first argument
+    const result = await PDFParse(buffer);
+    
+    // Extract text from all pages
+    const text = result.text || '';
+    if (!text || text.trim().length === 0) {
+      throw new Error('No text could be extracted from PDF (PDF may be image-only)');
+    }
+    
+    return cleanText(text);
+  } catch (error) {
+    const errorMsg = error instanceof Error ? error.message : String(error);
+    console.error('[PDF Extract] Error:', errorMsg);
+    throw new Error(`PDF text extraction failed: ${errorMsg}`);
+  }
 }
 
 /**
