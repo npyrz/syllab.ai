@@ -2,6 +2,11 @@ import mammoth from 'mammoth';
 import path from 'path';
 import { pathToFileURL } from 'url';
 
+// Preload the worker URL so Next.js bundles the asset for both node and edge runtimes
+const pdfWorkerUrlPromise = import('pdfjs-dist/legacy/build/pdf.worker.mjs?url')
+  .then(mod => mod.default)
+  .catch(() => null);
+
 /**
  * Extract text from PDF or DOCX files
  * @param buffer - File contents
@@ -42,21 +47,30 @@ export async function extractText(
 async function extractPdfText(buffer: Buffer): Promise<string> {
   const pdfjsLib = await import('pdfjs-dist/legacy/build/pdf.mjs');
 
+  const workerUrl = await pdfWorkerUrlPromise;
+
   if (pdfjsLib.GlobalWorkerOptions) {
-    const workerPath = path.join(
-      process.cwd(),
-      'node_modules',
-      'pdfjs-dist',
-      'legacy',
-      'build',
-      'pdf.worker.mjs'
-    );
-    pdfjsLib.GlobalWorkerOptions.workerSrc = pathToFileURL(workerPath).toString();
+    if (workerUrl) {
+      pdfjsLib.GlobalWorkerOptions.workerSrc = workerUrl;
+    } else {
+      const workerPath = path.join(
+        process.cwd(),
+        'node_modules',
+        'pdfjs-dist',
+        'legacy',
+        'build',
+        'pdf.worker.mjs'
+      );
+      pdfjsLib.GlobalWorkerOptions.workerSrc = pathToFileURL(workerPath).toString();
+    }
   }
 
   const loadingTask = (pdfjsLib as any).getDocument({
     data: new Uint8Array(buffer),
     disableWorker: true,
+    isEvalSupported: false,
+    useSystemFonts: true,
+    disableFontFace: true,
   });
   const pdf = await loadingTask.promise;
   let text = '';
