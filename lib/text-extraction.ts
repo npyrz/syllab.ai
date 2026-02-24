@@ -7,6 +7,61 @@ const pdfWorkerUrlPromise = import('pdfjs-dist/legacy/build/pdf.worker.mjs?url')
   .then(mod => mod.default)
   .catch(() => null);
 
+// pdfjs expects a handful of DOM APIs that are missing in the serverless runtime; provide light stubs
+function ensurePdfDomPolyfills() {
+  const g: any = globalThis as any;
+
+  if (!g.DOMMatrix) {
+    class SimpleDOMMatrix {
+      a = 1; b = 0; c = 0; d = 1; e = 0; f = 0;
+      constructor(init?: any) {
+        if (init && typeof init === 'object') {
+          this.a = init.a ?? this.a;
+          this.b = init.b ?? this.b;
+          this.c = init.c ?? this.c;
+          this.d = init.d ?? this.d;
+          this.e = init.e ?? this.e;
+          this.f = init.f ?? this.f;
+        }
+      }
+      multiplySelf() { return this; }
+      preMultiplySelf() { return this; }
+      translateSelf() { return this; }
+      scaleSelf() { return this; }
+      rotateSelf() { return this; }
+      invertSelf() { return this; }
+    }
+    g.DOMMatrix = SimpleDOMMatrix;
+  }
+
+  if (!g.Path2D) {
+    g.Path2D = class Path2D { constructor(_: any = undefined) {} };
+  }
+
+  if (!g.ImageData) {
+    g.ImageData = class ImageData {
+      data: Uint8ClampedArray;
+      width: number;
+      height: number;
+      constructor(data: Uint8ClampedArray | number, width?: number, height?: number) {
+        if (data instanceof Uint8ClampedArray && typeof width === 'number' && typeof height === 'number') {
+          this.data = data;
+          this.width = width;
+          this.height = height;
+        } else if (typeof data === 'number' && typeof width === 'number' && typeof height === 'number') {
+          this.data = new Uint8ClampedArray(data * width * height);
+          this.width = width;
+          this.height = height;
+        } else {
+          this.data = new Uint8ClampedArray(0);
+          this.width = 0;
+          this.height = 0;
+        }
+      }
+    };
+  }
+}
+
 /**
  * Extract text from PDF or DOCX files
  * @param buffer - File contents
@@ -45,6 +100,8 @@ export async function extractText(
  * @returns Extracted text content
  */
 async function extractPdfText(buffer: Buffer): Promise<string> {
+  ensurePdfDomPolyfills();
+
   const pdfjsLib = await import('pdfjs-dist/legacy/build/pdf.mjs');
 
   const workerUrl = await pdfWorkerUrlPromise;
