@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
+import { primeCurrentWeekScheduleForClass } from "@/lib/weekly-schedule-sync";
 
 /**
  * GET /api/classes
@@ -129,13 +130,27 @@ export async function PATCH(req: Request) {
       return NextResponse.json({ error: "Class not found" }, { status: 404 });
     }
 
+    const shouldUpdateWeek =
+      typeof currentWeek === "number" && Number.isFinite(currentWeek);
+
     const updated = await prisma.class.update({
       where: { id: classId },
       data: {
-        semester: semester !== undefined ? semester : existing.semester,
-        currentWeek: currentWeek !== undefined ? currentWeek : existing.currentWeek,
+        currentWeek: shouldUpdateWeek ? Math.max(1, Math.min(20, currentWeek)) : existing.currentWeek,
+        currentWeekSetAt: shouldUpdateWeek ? new Date() : existing.currentWeekSetAt,
       },
     });
+
+    if (shouldUpdateWeek) {
+      try {
+        await primeCurrentWeekScheduleForClass({
+          classId,
+          userId: session.user.id,
+        });
+      } catch (primeError) {
+        console.error("[Classes] Failed to prime weekly schedule:", primeError);
+      }
+    }
 
     return NextResponse.json({ success: true, class: updated });
   } catch (error) {

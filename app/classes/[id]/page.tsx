@@ -1,14 +1,15 @@
+import { Suspense } from "react";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { notFound, redirect } from "next/navigation";
 import ClassDocumentUploader from "@/app/components/ClassDocumentUploader";
 import ClassDocumentList from "@/app/components/ClassDocumentList";
 import ClassDeleteButton from "@/app/components/ClassDeleteButton";
-import WeeklySchedule from "@/app/components/WeeklySchedule";
+import WeekDashboardLoader from "@/app/components/WeekDashboardLoader";
+import WeeklyScheduleSkeleton from "@/app/components/WeeklyScheduleSkeleton";
 import {
-  getCachedWeeklyScheduleSummary,
-  getScheduleFingerprint,
-} from "@/lib/weekly-schedule-ai";
+  computeEffectiveCurrentWeek,
+} from "@/lib/week-utils";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -61,6 +62,23 @@ function extractHighlights(texts: Array<string | null>) {
 
 function titleCase(value: string) {
   return value.replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
+function formatUpcomingDateLabel(date: Date, now: Date): string {
+  const startOfTodayUtc = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+  const startOfTargetUtc = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
+  const diffDays = Math.round((startOfTargetUtc.getTime() - startOfTodayUtc.getTime()) / 86400000);
+
+  const weekday = date.toLocaleDateString("en-US", { weekday: "short", timeZone: "UTC" });
+  if (diffDays < 0) return weekday;
+  if (diffDays <= 6) return weekday;
+  if (diffDays <= 13) return `Next ${weekday}`;
+
+  return date.toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    timeZone: "UTC",
+  });
 }
 
 function extractScheduleDeadlines(
@@ -148,74 +166,13 @@ const WEEKDAYS = [
   "saturday",
 ];
 
-function startOfWeek(date: Date) {
-  const next = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
-  const day = next.getUTCDay();
-  next.setUTCDate(next.getUTCDate() - day);
-  return next;
-}
-
 function addDays(date: Date, days: number) {
   const next = new Date(date);
   next.setUTCDate(next.getUTCDate() + days);
   return next;
 }
 
-function computeTermStart(description: string | null, fallback: Date) {
-  if (!description) return startOfWeek(fallback);
-  const yearMatch = description.match(/(19|20)\d{2}/);
-  const year = yearMatch ? Number(yearMatch[0]) : fallback.getUTCFullYear();
-  const lower = description.toLowerCase();
-
-  if (lower.includes("spring")) {
-    return startOfWeek(new Date(Date.UTC(year, 0, 10)));
-  }
-  if (lower.includes("summer")) {
-    return startOfWeek(new Date(Date.UTC(year, 5, 1)));
-  }
-  if (lower.includes("fall") || lower.includes("autumn")) {
-    return startOfWeek(new Date(Date.UTC(year, 7, 20)));
-  }
-  if (lower.includes("winter")) {
-    return startOfWeek(new Date(Date.UTC(year, 11, 5)));
-  }
-
-  return startOfWeek(fallback);
-}
-
-function inferCurrentWeek(termDescriptor: string | null, now: Date) {
-  const termStart = computeTermStart(termDescriptor, now);
-  const nowUtc = new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()));
-  const diffMs = nowUtc.getTime() - termStart.getTime();
-  const rawWeek = Math.floor(diffMs / (7 * 24 * 60 * 60 * 1000)) + 1;
-  return Math.max(1, Math.min(20, rawWeek));
-}
-
-function weeksElapsed(from: Date, to: Date) {
-  const fromUtc = new Date(Date.UTC(from.getUTCFullYear(), from.getUTCMonth(), from.getUTCDate()));
-  const toUtc = new Date(Date.UTC(to.getUTCFullYear(), to.getUTCMonth(), to.getUTCDate()));
-  const diffMs = toUtc.getTime() - fromUtc.getTime();
-  if (diffMs <= 0) return 0;
-  return Math.floor(diffMs / (7 * 24 * 60 * 60 * 1000));
-}
-
-function computeEffectiveCurrentWeek(classRecord: {
-  currentWeek: number | null;
-  createdAt: Date;
-  semester: string | null;
-  description: string | null;
-}) {
-  const now = new Date();
-  if (classRecord.currentWeek) {
-    const elapsed = weeksElapsed(classRecord.createdAt, now);
-    return Math.max(1, Math.min(20, classRecord.currentWeek + elapsed));
-  }
-
-  const effectiveSemester = classRecord.semester ?? classRecord.description ?? null;
-  return inferCurrentWeek(effectiveSemester, now);
-}
-
-function parseDateFromLine(line: string, now: Date, termStart: Date): ParsedDate | null {
+function parseDateFromLine(line: string, now: Date): ParsedDate | null {
   const trimmed = line.trim();
   if (!trimmed) return null;
 
@@ -270,27 +227,12 @@ function parseDateFromLine(line: string, now: Date, termStart: Date): ParsedDate
     }
   }
 
-  const weekMatch = trimmed.match(/\bweek\s+(\d{1,2})\b/i);
-  if (weekMatch) {
-    const weekNumber = Number(weekMatch[1]);
-    if (weekNumber >= 1 && weekNumber <= 20) {
-      const candidate = addDays(termStart, (weekNumber - 1) * 7);
-      return { date: candidate, matched: weekMatch[0], confidence: "low" };
-    }
-  }
-
-  if (/\b(end of term|end of semester|end of quarter)\b/i.test(trimmed)) {
-    const candidate = addDays(termStart, 14 * 7);
-    return { date: candidate, matched: "end of term", confidence: "low" };
-  }
-
   return null;
 }
 
 function extractUpcomingItems(
   docs: Array<{ textExtracted: string | null; filename: string }>,
-  now: Date,
-  termStart: Date
+  now: Date
 ): UpcomingItem[] {
   const items: UpcomingItem[] = [];
   const nowUtc = new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()));
@@ -304,7 +246,7 @@ function extractUpcomingItems(
       .filter((line) => line.length >= 6 && line.length <= 140);
 
     for (const line of lines) {
-      const parsed = parseDateFromLine(line, now, termStart);
+      const parsed = parseDateFromLine(line, now);
       if (!parsed) continue;
 
       const date = parsed.date;
@@ -396,47 +338,6 @@ export default async function ClassDetailPage({
     },
   });
 
-  const scheduleDocFromFlag = classRecord.scheduleId
-    ? await prisma.document.findFirst({
-        where: {
-          id: classRecord.scheduleId,
-          classId: classRecord.id,
-          userId: classRecord.userId,
-          status: "done",
-          textExtracted: { not: null },
-        },
-        select: {
-          textExtracted: true,
-          filename: true,
-        },
-      })
-    : null;
-
-  const scheduleDocFallback = !scheduleDocFromFlag
-    ? await prisma.document.findFirst({
-        where: {
-          classId: classRecord.id,
-          userId: classRecord.userId,
-          status: "done",
-          textExtracted: { not: null },
-          OR: [
-            { docType: "schedule" },
-            { filename: { contains: "schedule", mode: "insensitive" } },
-            { filename: { contains: "calendar", mode: "insensitive" } },
-            { filename: { contains: "week", mode: "insensitive" } },
-            { filename: { contains: "timetable", mode: "insensitive" } },
-          ],
-        },
-        select: {
-          textExtracted: true,
-          filename: true,
-        },
-        orderBy: { createdAt: "desc" },
-      })
-    : null;
-
-  const scheduleDoc = scheduleDocFromFlag ?? scheduleDocFallback;
-
   const highlightDocs = await prisma.document.findMany({
     where: {
       classId: classRecord.id,
@@ -450,43 +351,24 @@ export default async function ClassDetailPage({
   const highlights = extractHighlights(
     highlightDocs.map((doc) => doc.textExtracted)
   );
-  const termStart = computeTermStart(classRecord.description ?? null, new Date());
-  const upcomingItems = extractUpcomingItems(highlightDocs, new Date(), termStart);
 
-  const effectiveSemester = classRecord.semester ?? classRecord.description ?? null;
-  const effectiveCurrentWeek = computeEffectiveCurrentWeek(classRecord);
-  const scheduleFingerprint = scheduleDoc?.textExtracted
-    ? getScheduleFingerprint(scheduleDoc.textExtracted)
-    : null;
-  const weekSpecificItems = scheduleDoc?.textExtracted
-    ? await getCachedWeeklyScheduleSummary({
-        classId: classRecord.id,
-        scheduleText: scheduleDoc.textExtracted,
+  const now = new Date();
+  const effectiveCurrentWeek = computeEffectiveCurrentWeek(classRecord, now);
+
+  if (
+    classRecord.currentWeek &&
+    effectiveCurrentWeek &&
+    effectiveCurrentWeek !== classRecord.currentWeek
+  ) {
+    await prisma.class.update({
+      where: { id: classRecord.id },
+      data: {
         currentWeek: effectiveCurrentWeek,
-        semester: effectiveSemester,
-        scheduleFingerprint: scheduleFingerprint ?? "none",
-      })
-    : [];
-
-  // Also extract deadlines from schedule document if available
-  const scheduleDeadlines = extractScheduleDeadlines(
-    scheduleDoc?.textExtracted ?? null,
-    effectiveCurrentWeek,
-    new Date()
-  );
-
-  // Combine and deduplicate upcoming items
-  const allUpcomingItems = [...upcomingItems, ...scheduleDeadlines];
-  const uniqueItems = new Map<string, UpcomingItem>();
-  for (const item of allUpcomingItems) {
-    const key = `${item.date.toISOString().slice(0, 10)}-${item.label.toLowerCase()}`;
-    if (!uniqueItems.has(key)) uniqueItems.set(key, item);
+        currentWeekSetAt: now,
+      },
+    });
   }
-
-  const finalUpcomingItems = Array.from(uniqueItems.values())
-    .sort((a, b) => a.date.getTime() - b.date.getTime())
-    .slice(0, 6);
-
+  
   return (
     <div className="relative min-h-[calc(100vh-64px)] bg-[color:var(--app-bg)]">
       <main className="mx-auto w-full max-w-5xl px-6 py-12">
@@ -507,15 +389,13 @@ export default async function ClassDetailPage({
           />
         </div>
 
-        {scheduleDoc ? (
-          <section className="mt-10">
-            <WeeklySchedule
-              currentWeek={effectiveCurrentWeek}
-              semester={effectiveSemester}
-              weekItems={weekSpecificItems}
-            />
-          </section>
-        ) : null}
+        <Suspense fallback={<WeeklyScheduleSkeleton />}>
+          <WeekDashboardLoader
+            classId={classRecord.id}
+            userId={classRecord.userId}
+            currentWeek={effectiveCurrentWeek}
+          />
+        </Suspense>
 
         {highlights.length ? (
           <section className="mt-10">
@@ -534,38 +414,6 @@ export default async function ClassDetailPage({
                   >
                     {titleCase(item)}
                   </span>
-                ))}
-              </div>
-            </div>
-          </section>
-        ) : null}
-
-        {finalUpcomingItems.length ? (
-          <section className="mt-10">
-            <h2 className="text-sm font-semibold tracking-wide text-[color:var(--app-text)]">
-              Upcoming
-            </h2>
-            <div className="mt-4 rounded-3xl bg-[color:var(--app-surface)] p-4 ring-1 ring-[color:var(--app-border)] shadow-[var(--app-shadow)]">
-              <div className="text-xs font-medium text-[color:var(--app-subtle)]">
-                Dates Found In Your Files
-              </div>
-              <div className="mt-3 space-y-2">
-                {finalUpcomingItems.map((item) => (
-                  <div
-                    key={`${item.date.toISOString()}-${item.label}`}
-                    className="flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-[color:var(--app-panel)] px-4 py-2 text-xs text-[color:var(--app-text)] ring-1 ring-[color:var(--app-border)]"
-                  >
-                    <div className="text-[color:var(--app-text)]">{item.label}</div>
-                    <div className="flex flex-wrap items-center gap-2 text-[11px] text-[color:var(--app-subtle)]">
-                      <span>{titleCase(item.dateLabel)}</span>
-                      <span className="rounded-full bg-[color:var(--app-chip)] px-2 py-0.5 text-[10px] text-[color:var(--app-subtle)] ring-1 ring-[color:var(--app-border)]">
-                        {titleCase(item.confidence)} Confidence
-                      </span>
-                      <span className="rounded-full bg-[color:var(--app-chip)] px-2 py-0.5 text-[10px] text-[color:var(--app-subtle)] ring-1 ring-[color:var(--app-border)]">
-                        {item.source}
-                      </span>
-                    </div>
-                  </div>
                 ))}
               </div>
             </div>

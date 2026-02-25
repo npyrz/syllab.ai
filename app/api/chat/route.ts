@@ -4,10 +4,60 @@ import { prisma } from '@/lib/prisma';
 import { generateText } from 'ai';
 import { groq } from '@ai-sdk/groq';
 
+const CHAT_MODEL = process.env.GROQ_CHAT_MODEL || 'llama-3.1-8b-instant';
+
 const USER_DAILY_REQUEST_LIMIT = 1000;
 const USER_DAILY_TOKEN_LIMIT = 200_000;
 const GLOBAL_DAILY_REQUEST_LIMIT = 1000;
 const GLOBAL_DAILY_TOKEN_LIMIT = 200_000;
+
+const SOURCE_STOP_WORDS = new Set([
+  'the', 'and', 'that', 'with', 'this', 'from', 'your', 'you', 'for', 'are', 'was', 'were',
+  'have', 'has', 'had', 'about', 'into', 'also', 'than', 'then', 'when', 'what', 'where', 'which',
+  'will', 'would', 'should', 'could', 'there', 'their', 'them', 'they', 'been', 'being', 'because',
+  'while', 'using', 'used', 'into', 'over', 'under', 'more', 'most', 'some', 'such', 'only', 'just',
+  'very', 'much', 'many', 'each', 'other', 'than', 'make', 'made', 'does', 'did', 'done', 'its',
+]);
+
+function getRelevantSources(params: {
+  response: string;
+  documents: Array<{ filename: string; textExtracted: string | null }>;
+}) {
+  const candidateTerms = Array.from(
+    new Set(
+      params.response
+        .toLowerCase()
+        .match(/[a-z][a-z0-9]{3,}/g) ?? []
+    )
+  ).filter((term) => !SOURCE_STOP_WORDS.has(term));
+
+  if (candidateTerms.length === 0) return [] as string[];
+
+  const scored = params.documents
+    .map((doc) => {
+      const text = (doc.textExtracted ?? '').toLowerCase();
+      if (!text) return { filename: doc.filename, score: 0 };
+
+      let score = 0;
+      for (const term of candidateTerms) {
+        if (text.includes(term)) score += 1;
+      }
+
+      return { filename: doc.filename, score };
+    })
+    .filter((entry) => entry.score > 0)
+    .sort((a, b) => b.score - a.score);
+
+  if (scored.length === 0) return [] as string[];
+
+  const maxScore = scored[0].score;
+  const threshold = Math.max(2, Math.floor(maxScore * 0.35));
+
+  return scored
+    .filter((entry) => entry.score >= threshold)
+    .slice(0, 4)
+    .map((entry) => entry.filename);
+}
 
 function getUtcDayStart(date: Date) {
   return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
@@ -175,7 +225,7 @@ ${context}
 
     // Call Groq (via AI SDK)
     const result = await generateText({
-      model: groq('openai/gpt-oss-120b'),
+      model: groq(CHAT_MODEL),
       system: systemPrompt,
       prompt: message,
       temperature: 0.5,
@@ -208,13 +258,16 @@ ${context}
 
     console.log(`[Chat] Generated response for class ${classId}`);
 
-    // Collect source filenames for attribution
-    const sources = documents.map((doc) => doc.filename);
+    // Collect source filenames for attribution (only relevant files)
+    const sources = getRelevantSources({
+      response: result.text,
+      documents,
+    });
 
     return NextResponse.json({
       success: true,
       response: result.text,
-      documentsUsed: documents.length,
+      documentsUsed: sources.length,
       sources,
     });
   } catch (error) {
