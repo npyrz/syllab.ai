@@ -1,0 +1,2 @@
+-- AlterTable
+ALTER TABLE "Class" ALTER COLUMN "currentWeekSetAt" SET DATA TYPE TIMESTAMP(3);

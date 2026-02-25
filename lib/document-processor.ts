@@ -1,5 +1,7 @@
 import { prisma } from '@/lib/prisma';
 import { extractText } from '@/lib/text-extraction';
+import { del } from '@vercel/blob';
+import { primeCurrentWeekScheduleForClass } from '@/lib/weekly-schedule-sync';
 
 /**
  * Extract weekly schedule from document text
@@ -123,13 +125,25 @@ export async function processDocument(documentId: string): Promise<void> {
     );
     console.log(`[Worker] Text preview:\n${extractedText.substring(0, 500)}...\n`);
 
-    // If this is a schedule document, extract weekly schedule info
+    // If this is a schedule document, extract basic weekly schedule info
     let weeklyInfo: string | undefined = undefined;
+    
     if (document.docType === 'schedule') {
+      // Extract basic weekly schedule info
       const schedule = extractWeeklySchedule(extractedText);
-      // Only save if we found any schedule data
       if (Object.values(schedule).some(day => day.length > 0)) {
         weeklyInfo = JSON.stringify(schedule);
+      }
+    }
+
+    // Delete the blob file from Vercel Blob storage
+    if (document.storageKey) {
+      try {
+        await del(document.storageKey);
+        console.log(`[Worker] Deleted blob: ${document.storageKey}`);
+      } catch (deleteError) {
+        console.warn(`[Worker] Failed to delete blob ${document.storageKey}:`, deleteError);
+        // Continue even if delete fails
       }
     }
 
@@ -144,6 +158,17 @@ export async function processDocument(documentId: string): Promise<void> {
         ...(weeklyInfo && { weeklyInfo }),
       },
     });
+
+    if (document.docType === 'schedule' || document.docType === 'syllabus') {
+      try {
+        await primeCurrentWeekScheduleForClass({
+          classId: document.classId,
+          userId: document.userId,
+        });
+      } catch (primeError) {
+        console.error(`[Worker] Failed to prime weekly schedule for class ${document.classId}:`, primeError);
+      }
+    }
 
     console.log(`[Worker] Successfully processed document: ${documentId}`);
   } catch (error) {
