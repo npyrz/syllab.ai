@@ -4,7 +4,7 @@ import { prisma } from '@/lib/prisma';
 import { generateText } from 'ai';
 import { groq } from '@ai-sdk/groq';
 
-const CHAT_MODEL = process.env.GROQ_CHAT_MODEL || 'llama-3.1-8b-instant';
+const CHAT_MODEL = process.env.GROQ_CHAT_MODEL;
 
 const USER_DAILY_REQUEST_LIMIT = 1000;
 const USER_DAILY_TOKEN_LIMIT = 200_000;
