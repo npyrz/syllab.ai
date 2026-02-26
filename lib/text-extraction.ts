@@ -35,6 +35,11 @@ type PdfJsModule = {
   }) => PdfLoadingTask;
 };
 
+function isInvalidPageRequestError(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+  return /invalid page request/i.test(error.message);
+}
+
 // Preload the worker URL so Next.js bundles the asset for both node and edge runtimes
 const pdfWorkerUrlPromise = import('pdfjs-dist/legacy/build/pdf.worker.mjs?url')
   .then(mod => mod.default)
@@ -165,6 +170,8 @@ async function extractPdfText(buffer: Buffer): Promise<string> {
   let pdf: PdfDocument | null = null;
   let text = '';
   let extractedPages = 0;
+  let skippedPages = 0;
+  let stoppedEarlyForInvalidPageRange = false;
 
   try {
     pdf = await loadingTask.promise;
@@ -182,6 +189,13 @@ async function extractPdfText(buffer: Buffer): Promise<string> {
           extractedPages += 1;
         }
       } catch (pageError) {
+        skippedPages += 1;
+
+        if (isInvalidPageRequestError(pageError)) {
+          stoppedEarlyForInvalidPageRange = true;
+          break;
+        }
+
         console.warn(`[PDF] Failed to extract page ${pageNumber}:`, pageError);
       }
     }
@@ -194,6 +208,17 @@ async function extractPdfText(buffer: Buffer): Promise<string> {
   }
 
   const cleaned = cleanText(text);
+
+  if (stoppedEarlyForInvalidPageRange) {
+    console.warn(
+      `[PDF] Stopped page iteration early after invalid page request. extractedPages=${extractedPages}, skippedPages=${skippedPages}, reportedNumPages=${pdf?.numPages ?? 'unknown'}`
+    );
+  } else if (skippedPages > 0) {
+    console.warn(
+      `[PDF] Completed extraction with skipped pages. extractedPages=${extractedPages}, skippedPages=${skippedPages}, reportedNumPages=${pdf?.numPages ?? 'unknown'}`
+    );
+  }
+
   if (!cleaned || extractedPages === 0) {
     throw new Error('No readable text could be extracted from PDF');
   }
