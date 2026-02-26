@@ -36,7 +36,7 @@ export default function SemesterWeekVerifier({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4 backdrop-blur-sm">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-transparent px-4 backdrop-blur-sm">
       <div className="w-full max-w-md rounded-3xl bg-[color:var(--app-surface)] p-6 text-sm text-[color:var(--app-text)] ring-1 ring-[color:var(--app-border)] shadow-[0_24px_70px_rgba(0,0,0,0.45)]">
         <div className="text-base font-semibold text-[color:var(--app-text)]">
           Set Current Week

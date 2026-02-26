@@ -2,6 +2,44 @@ import mammoth from 'mammoth';
 import path from 'path';
 import { pathToFileURL } from 'url';
 
+type PolyfillGlobals = {
+  DOMMatrix?: unknown;
+  Path2D?: unknown;
+  ImageData?: unknown;
+};
+
+type PdfTextItem = { str?: string };
+
+type PdfPage = {
+  getTextContent: () => Promise<{ items: PdfTextItem[] }>;
+};
+
+type PdfDocument = {
+  numPages: number;
+  getPage: (pageNumber: number) => Promise<PdfPage>;
+};
+
+type PdfLoadingTask = {
+  promise: Promise<PdfDocument>;
+  destroy: () => Promise<void> | void;
+};
+
+type PdfJsModule = {
+  GlobalWorkerOptions?: { workerSrc: string };
+  getDocument: (options: {
+    data: Uint8Array;
+    disableWorker: boolean;
+    isEvalSupported: boolean;
+    useSystemFonts: boolean;
+    disableFontFace: boolean;
+  }) => PdfLoadingTask;
+};
+
+function isInvalidPageRequestError(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+  return /invalid page request/i.test(error.message);
+}
+
 // Preload the worker URL so Next.js bundles the asset for both node and edge runtimes
 const pdfWorkerUrlPromise = import('pdfjs-dist/legacy/build/pdf.worker.mjs?url')
   .then(mod => mod.default)
@@ -9,12 +47,12 @@ const pdfWorkerUrlPromise = import('pdfjs-dist/legacy/build/pdf.worker.mjs?url')
 
 // pdfjs expects a handful of DOM APIs that are missing in the serverless runtime; provide light stubs
 function ensurePdfDomPolyfills() {
-  const g: any = globalThis as any;
+  const g = globalThis as unknown as PolyfillGlobals;
 
   if (!g.DOMMatrix) {
     class SimpleDOMMatrix {
       a = 1; b = 0; c = 0; d = 1; e = 0; f = 0;
-      constructor(init?: any) {
+      constructor(init?: { a?: number; b?: number; c?: number; d?: number; e?: number; f?: number }) {
         if (init && typeof init === 'object') {
           this.a = init.a ?? this.a;
           this.b = init.b ?? this.b;
@@ -35,7 +73,7 @@ function ensurePdfDomPolyfills() {
   }
 
   if (!g.Path2D) {
-    g.Path2D = class Path2D { constructor(_: any = undefined) {} };
+    g.Path2D = class Path2D { constructor() {} };
   }
 
   if (!g.ImageData) {
@@ -102,7 +140,7 @@ export async function extractText(
 async function extractPdfText(buffer: Buffer): Promise<string> {
   ensurePdfDomPolyfills();
 
-  const pdfjsLib = await import('pdfjs-dist/legacy/build/pdf.mjs');
+  const pdfjsLib = (await import('pdfjs-dist/legacy/build/pdf.mjs')) as unknown as PdfJsModule;
 
   const workerUrl = await pdfWorkerUrlPromise;
 
@@ -122,26 +160,70 @@ async function extractPdfText(buffer: Buffer): Promise<string> {
     }
   }
 
-  const loadingTask = (pdfjsLib as any).getDocument({
+  const loadingTask = pdfjsLib.getDocument({
     data: new Uint8Array(buffer),
     disableWorker: true,
     isEvalSupported: false,
     useSystemFonts: true,
     disableFontFace: true,
   });
-  const pdf = await loadingTask.promise;
+  let pdf: PdfDocument | null = null;
   let text = '';
+  let extractedPages = 0;
+  let skippedPages = 0;
+  let stoppedEarlyForInvalidPageRange = false;
 
-  for (let i = 0; i < pdf.numPages; i++) {
-    const page = await pdf.getPage(i + 1);
-    const textContent = await page.getTextContent();
-    const pageText = textContent.items
-      .map((item: any) => item.str)
-      .join('');
-    text += pageText + '\n';
+  try {
+    pdf = await loadingTask.promise;
+
+    for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber++) {
+      try {
+        const page = await pdf.getPage(pageNumber);
+        const textContent = await page.getTextContent();
+        const pageText = textContent.items
+          .map((item) => item.str ?? '')
+          .join('');
+
+        if (pageText.trim()) {
+          text += pageText + '\n';
+          extractedPages += 1;
+        }
+      } catch (pageError) {
+        skippedPages += 1;
+
+        if (isInvalidPageRequestError(pageError)) {
+          stoppedEarlyForInvalidPageRange = true;
+          break;
+        }
+
+        console.warn(`[PDF] Failed to extract page ${pageNumber}:`, pageError);
+      }
+    }
+  } finally {
+    try {
+      await loadingTask.destroy();
+    } catch {
+      // no-op
+    }
   }
 
-  return cleanText(text);
+  const cleaned = cleanText(text);
+
+  if (stoppedEarlyForInvalidPageRange) {
+    console.warn(
+      `[PDF] Stopped page iteration early after invalid page request. extractedPages=${extractedPages}, skippedPages=${skippedPages}, reportedNumPages=${pdf?.numPages ?? 'unknown'}`
+    );
+  } else if (skippedPages > 0) {
+    console.warn(
+      `[PDF] Completed extraction with skipped pages. extractedPages=${extractedPages}, skippedPages=${skippedPages}, reportedNumPages=${pdf?.numPages ?? 'unknown'}`
+    );
+  }
+
+  if (!cleaned || extractedPages === 0) {
+    throw new Error('No readable text could be extracted from PDF');
+  }
+
+  return cleaned;
 }
 
 /**

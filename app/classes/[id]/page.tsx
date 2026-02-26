@@ -338,6 +338,10 @@ export default async function ClassDetailPage({
     },
   });
 
+  const processingDocumentIds = documents
+    .filter((doc) => doc.status === "pending" || doc.status === "processing")
+    .map((doc) => doc.id);
+
   const highlightDocs = await prisma.document.findMany({
     where: {
       classId: classRecord.id,
@@ -435,7 +439,10 @@ export default async function ClassDetailPage({
               <ClassDocumentList documents={documents} />
             </div>
             <div>
-              <ClassDocumentUploader classId={classRecord.id} />
+              <ClassDocumentUploader
+                classId={classRecord.id}
+                initialProcessingDocumentIds={processingDocumentIds}
+              />
             </div>
           </div>
         </section>

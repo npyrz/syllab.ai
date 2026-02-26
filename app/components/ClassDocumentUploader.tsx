@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import SemesterWeekVerifier from "./SemesterWeekVerifier";
 
@@ -15,6 +15,10 @@ type UploadResult = {
 };
 
 type UploadPhase = "idle" | "uploading" | "extracting" | "refreshing";
+
+function wait(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
 
 function formatFileCount(files: File[]) {
   if (files.length === 0) return "No Files Selected";
@@ -36,18 +40,13 @@ function inferDocTypeFromFilename(file: File): "syllabus" | "schedule" | "other"
   return "other";
 }
 
-function formatExtractionStatus(status?: string) {
-  if (!status) return "Waiting for extraction";
-
-  if (status === "pending") return "Queued for extraction";
-  if (status === "processing") return "Extracting text";
-  if (status === "done") return "Extraction complete";
-  if (status === "failed") return "Extraction failed";
-
-  return status;
-}
-
-export default function ClassDocumentUploader({ classId }: { classId: string }) {
+export default function ClassDocumentUploader({
+  classId,
+  initialProcessingDocumentIds = [],
+}: {
+  classId: string;
+  initialProcessingDocumentIds?: string[];
+}) {
   const router = useRouter();
   const [files, setFiles] = useState<File[]>([]);
   const [phase, setPhase] = useState<UploadPhase>("idle");
@@ -87,9 +86,7 @@ export default function ClassDocumentUploader({ classId }: { classId: string }) 
     };
   }, [documentStatuses, results]);
 
-  const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
-
-  const waitForExtraction = async (documentIds: string[]) => {
+  const waitForExtraction = useCallback(async (documentIds: string[]) => {
     if (!documentIds.length) return;
 
     setPhase("extracting");
@@ -135,7 +132,39 @@ export default function ClassDocumentUploader({ classId }: { classId: string }) 
     }
 
     throw new Error("Extraction is taking longer than expected. You can refresh in a few seconds.");
-  };
+  }, [classId]);
+
+  useEffect(() => {
+    if (!initialProcessingDocumentIds.length || phase !== "idle") return;
+
+    let isCancelled = false;
+
+    const monitorExistingProcessing = async () => {
+      try {
+        await waitForExtraction(initialProcessingDocumentIds);
+      } catch (err) {
+        if (!isCancelled) {
+          setError(
+            err instanceof Error
+              ? err.message
+              : "Extraction is still running. Please refresh shortly."
+          );
+        }
+      }
+
+      if (isCancelled) return;
+
+      setPhase("refreshing");
+      router.refresh();
+      setPhase("idle");
+    };
+
+    void monitorExistingProcessing();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [initialProcessingDocumentIds, phase, router, waitForExtraction]);
 
   const uploadFile = (file: File, key: string) =>
     new Promise<UploadResult>((resolve) => {
@@ -279,7 +308,7 @@ export default function ClassDocumentUploader({ classId }: { classId: string }) 
     phase === "uploading"
       ? `Uploading files (${uploadProgress}%)`
       : phase === "extracting"
-      ? `Extracting document text (${extractionProgress.done}/${extractionProgress.total})`
+      ? `Preparing documents (${extractionProgress.done}/${extractionProgress.total})`
       : phase === "refreshing"
       ? "Finalizing and refreshing"
       : null;
@@ -365,7 +394,7 @@ export default function ClassDocumentUploader({ classId }: { classId: string }) 
           {phase === "uploading"
             ? "Uploading..."
             : phase === "extracting"
-            ? "Extracting..."
+            ? "Preparing..."
             : phase === "refreshing"
             ? "Refreshing..."
             : "Upload Documents"}
@@ -412,11 +441,6 @@ export default function ClassDocumentUploader({ classId }: { classId: string }) 
               <li key={result.key}>
                 {result.ok ? "Uploaded" : "Failed"}: {result.name}
                 {result.error ? ` (${result.error})` : ""}
-                {result.ok
-                  ? ` • ${formatExtractionStatus(
-                      result.documentId ? documentStatuses[result.documentId] ?? result.status : result.status
-                    )}`
-                  : ""}
               </li>
             ))}
           </ul>
