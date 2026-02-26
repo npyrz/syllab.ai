@@ -72,48 +72,6 @@ AI-powered class management built with Next.js App Router, NextAuth, Prisma, and
 - Vercel Blob
 - AI SDK + Groq provider
 
-## Getting Started
-
-```bash
-npm install
-npm run dev
-```
-
-Open `http://localhost:3000`.
-
-## Environment Variables
-
-Create `.env.local` with:
-
-- `AUTH_SECRET`
-- `DATABASE_URL`
-- `GROQ_API_KEY`
-- `GROQ_CHAT_MODEL` (optional, chat model override)
-- `GROQ_SCHEDULE_MODEL` (optional, weekly schedule model override)
-- `GROQ_MODEL` (optional generic fallback used by schedule logic)
-- `GROQ_FALLBACK_MODEL` (optional fallback for legacy/alternate schedule pipeline)
-- `AUTH_GOOGLE_ID` (optional, enables Google sign-in)
-- `AUTH_GOOGLE_SECRET` (optional, enables Google sign-in)
-- `CRON_SECRET` (optional, protects `/api/schedules/refresh`)
-- `BLOB_READ_WRITE_TOKEN` (required for Vercel Blob in non-Vercel local/dev setups)
-
-## Database & Prisma
-
-```bash
-npx prisma migrate dev
-npx prisma generate
-npx prisma studio
-```
-
-Main models:
-
-- `User`
-- `Class`
-- `Document`
-- `WeekSchedule`
-- `ApiUsageDaily`
-- `ApiUsageGlobalDaily`
-
 ## Important Implementation Notes
 
 - Authorization is enforced in API routes using `auth()` + ownership checks.
@@ -124,6 +82,24 @@ Main models:
 
 ## Upcoming Features
 
+- Streaming chat responses
+  - Stream assistant output token-by-token so answers appear in real time.
+- Phone-friendly chat and class experience
+  - Improve responsive layout and controls for mobile screens.
+- Token usage visibility in chat UI
+  - Show per-message output token usage and daily usage feedback in the interface.
+- Chat UI polish
+  - Improve message spacing, readability, and interaction flow.
+- Chat response quality improvements
+  - Improve prompts/context handling for clearer, more accurate answers.
+- Schedule extraction reliability fixes
+  - Improve parsing robustness for varied syllabus/schedule formats.
+- Auto-detect current week from document dates
+  - Remove manual “what week are you in?” step and infer week from syllabus/schedule date anchors.
+- Open uploaded files directly in the app
+  - Let users view submitted files from the website without leaving the product.
+- Better upload/extraction loading states
+  - Add clearer progress and processing states for uploads and text extraction.
 - Lecture notes ingestion + readability pass
   - Upload lecture notes and auto-convert into cleaner, easier-to-read study notes.
 - Study material generation from lecture content

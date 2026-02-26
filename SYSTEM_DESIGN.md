@@ -246,30 +246,15 @@ Implemented with NextAuth v5 beta:
 - Build/deploy target: Next.js production runtime
 - Optional cron integration for schedule precomputation via `/api/schedules/refresh`
 
-## 13) Environment Variables
-
-- Required:
-  - `AUTH_SECRET`
-  - `DATABASE_URL`
-  - `GROQ_API_KEY`
-- Optional feature/config vars:
-  - `AUTH_GOOGLE_ID`, `AUTH_GOOGLE_SECRET`
-  - `GROQ_CHAT_MODEL`
-  - `GROQ_SCHEDULE_MODEL`
-  - `GROQ_MODEL`
-  - `GROQ_FALLBACK_MODEL`
-  - `CRON_SECRET`
-  - `BLOB_READ_WRITE_TOKEN` (for local/non-managed blob auth scenarios)
-
-## 14) Known Constraints (Current)
+## 13) Known Constraints (Current)
 
 - Document processing is currently invoked inline from upload route (not queue-backed yet).
 - Chat context is raw concatenated extracted text (no vector retrieval yet).
 - Quota thresholds are fixed constants in route logic.
 
-## 15) Upcoming Features Roadmap
+## 14) Upcoming Features Roadmap
 
-### 15.1 Lecture Notes -> Readable Notes
+### 14.1 Lecture Notes -> Readable Notes
 
 - Goal: allow uploading lecture notes and generate cleaner, more readable study notes.
 - Planned approach:
@@ -277,7 +262,7 @@ Implemented with NextAuth v5 beta:
   - Store normalized/rewritten notes as class-linked artifacts.
   - Surface readable notes in class detail UI.
 
-### 15.2 Lecture Material -> Quizzes & Flashcards
+### 14.2 Lecture Material -> Quizzes & Flashcards
 
 - Goal: generate active-recall study tools from lecture materials.
 - Planned approach:
@@ -285,7 +270,7 @@ Implemented with NextAuth v5 beta:
   - Persist generated items per class/week/topic for reuse.
   - Expose review UI for practicing and regenerating sets.
 
-### 15.3 Personal Notes
+### 14.3 Personal Notes
 
 - Goal: let users add their own notes to each class.
 - Planned approach:
@@ -293,7 +278,7 @@ Implemented with NextAuth v5 beta:
   - Include user notes as optional context in AI responses.
   - Keep personal notes visually separate from uploaded document extracts.
 
-### 15.4 Weekly Web Resource Discovery
+### 14.4 Weekly Web Resource Discovery
 
 - Goal: when syllabus/schedule highlights weekly material, find useful external resources.
 - Planned approach:
@@ -301,3 +286,67 @@ Implemented with NextAuth v5 beta:
   - Run a web discovery pass for trusted learning resources.
   - Store curated links with summary metadata per week/class.
   - Present suggested resources in the weekly dashboard alongside “This week” and “Upcoming”.
+
+### 14.5 Streaming Chat Responses
+
+- Goal: make chat feel faster and more interactive by showing partial responses immediately.
+- Planned approach:
+  - Move chat endpoint output to streaming transport.
+  - Update chat UI to render incremental assistant tokens.
+  - Keep quota accounting compatible with streamed completion metadata.
+
+### 14.6 Mobile/Phone-Friendly UX Improvements
+
+- Goal: improve usability on smaller screens.
+- Planned approach:
+  - Tune spacing, typography, and input controls for touch targets.
+  - Improve chat composer and class navigation responsiveness.
+  - Validate key flows on common viewport sizes.
+
+### 14.7 Token Usage Feedback in UI
+
+- Goal: give users transparent token usage visibility.
+- Planned approach:
+  - Expose per-response usage in API payloads.
+  - Show output token usage near each assistant message.
+  - Add daily usage indicators to reduce quota surprises.
+
+### 14.8 Chat UI & Response Quality Improvements
+
+- Goal: improve readability and answer quality.
+- Planned approach:
+  - Refine chat message rendering and conversation ergonomics.
+  - Improve prompt structure and document-context selection.
+  - Add quality checks/fallback behavior for low-confidence outputs.
+
+### 14.9 Schedule Extraction Reliability
+
+- Goal: increase success rate across diverse syllabus/schedule formats.
+- Planned approach:
+  - Harden date/row parsing logic with broader pattern coverage.
+  - Add fallback extraction paths for noisy formatting.
+  - Improve normalization for downstream weekly schedule generation.
+
+### 14.10 Auto-Detect Current Week from Course Dates
+
+- Goal: remove manual week selection and infer current week automatically.
+- Planned approach:
+  - Detect term anchor dates from syllabus/schedule text.
+  - Compute current week from today’s date against inferred date ranges.
+  - Store inferred anchor data and allow optional manual override.
+
+### 14.11 Open Uploaded Files In-App
+
+- Goal: let users open/view submitted files directly on the website.
+- Planned approach:
+  - Add secure document viewing route and access checks.
+  - Preserve/serve viewable document assets when needed.
+  - Link document list items to in-app viewer.
+
+### 14.12 Upload & Extraction Loading State Improvements
+
+- Goal: provide clear status during upload and processing.
+- Planned approach:
+  - Expand progress indicators for upload and extraction phases.
+  - Show queued/processing/done states with better user messaging.
+  - Refresh class document status without confusing intermediate flicker.
