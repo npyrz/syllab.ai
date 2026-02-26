@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/auth';
 import { prisma } from '@/lib/prisma';
-import { generateText } from 'ai';
+import { streamText } from 'ai';
 import { groq } from '@ai-sdk/groq';
 
 const CHAT_MODEL =
@@ -224,8 +224,7 @@ ${context}
       );
     }
 
-    // Call Groq (via AI SDK)
-    const result = await generateText({
+    const result = await streamText({
       model: groq(CHAT_MODEL),
       system: systemPrompt,
       prompt: message,
@@ -233,43 +232,123 @@ ${context}
       maxOutputTokens: 2048,
     });
 
-    const totalTokens = result.usage?.totalTokens ?? 0;
+    const encoder = new TextEncoder();
+    let fullResponse = '';
 
-    await Promise.all([
-      prisma.apiUsageDaily.update({
-        where: {
-          userId_windowStart: {
-            userId: session.user.id,
-            windowStart: userDayStart,
-          },
-        },
-        data: {
-          requestCount: { increment: 1 },
-          tokenCount: { increment: totalTokens },
-        },
-      }),
-      prisma.apiUsageGlobalDaily.update({
-        where: { windowStart: globalDayStart },
-        data: {
-          requestCount: { increment: 1 },
-          tokenCount: { increment: totalTokens },
-        },
-      }),
-    ]);
+    let isClosed = false;
+    let isCancelled = false;
 
-    console.log(`[Chat] Generated response for class ${classId}`);
+    const stream = new ReadableStream({
+      async start(controller) {
 
-    // Collect source filenames for attribution (only relevant files)
-    const sources = getRelevantSources({
-      response: result.text,
-      documents,
+        const safeEnqueue = (value: string) => {
+          if (isClosed || isCancelled) return false;
+          try {
+            controller.enqueue(encoder.encode(value));
+            return true;
+          } catch (enqueueError) {
+            if (!isCancelled) {
+              console.warn('[Chat] Stream enqueue failed:', enqueueError);
+            }
+            isClosed = true;
+            return false;
+          }
+        };
+
+        const safeClose = () => {
+          if (isClosed) return;
+          isClosed = true;
+          try {
+            controller.close();
+          } catch (closeError) {
+            console.warn('[Chat] Stream close failed:', closeError);
+          }
+        };
+
+        const onAbort = () => {
+          isCancelled = true;
+          safeClose();
+        };
+
+        req.signal.addEventListener('abort', onAbort);
+
+        try {
+          for await (const chunk of result.textStream) {
+            if (isCancelled) return;
+            fullResponse += chunk;
+            if (!safeEnqueue(`event: token\ndata: ${JSON.stringify({ token: chunk })}\n\n`)) {
+              return;
+            }
+          }
+
+          const usage = await result.usage;
+          const totalTokens = usage?.totalTokens ?? 0;
+
+          await Promise.all([
+            prisma.apiUsageDaily.update({
+              where: {
+                userId_windowStart: {
+                  userId: session.user.id,
+                  windowStart: userDayStart,
+                },
+              },
+              data: {
+                requestCount: { increment: 1 },
+                tokenCount: { increment: totalTokens },
+              },
+            }),
+            prisma.apiUsageGlobalDaily.update({
+              where: { windowStart: globalDayStart },
+              data: {
+                requestCount: { increment: 1 },
+                tokenCount: { increment: totalTokens },
+              },
+            }),
+          ]);
+
+          console.log(`[Chat] Generated response for class ${classId}`);
+
+          const sources = getRelevantSources({
+            response: fullResponse,
+            documents,
+          });
+
+          safeEnqueue(
+            `event: done\ndata: ${JSON.stringify({
+              response: fullResponse,
+              sources,
+              documentsUsed: sources.length,
+            })}\n\n`
+          );
+          safeClose();
+        } catch (streamError) {
+          console.error('[Chat] Streaming error:', streamError);
+          if (!isCancelled) {
+            safeEnqueue(
+              `event: error\ndata: ${JSON.stringify({
+                error: 'Failed to stream chat response',
+              })}\n\n`
+            );
+          }
+          safeClose();
+        } finally {
+          req.signal.removeEventListener('abort', onAbort);
+        }
+      },
+      cancel() {
+        isCancelled = true;
+        isClosed = true;
+        console.warn('[Chat] Stream cancelled by client');
+      },
     });
 
-    return NextResponse.json({
-      success: true,
-      response: result.text,
-      documentsUsed: sources.length,
-      sources,
+    return new Response(stream, {
+      headers: {
+        'Content-Type': 'text/event-stream; charset=utf-8',
+        'Cache-Control': 'no-cache, no-transform',
+        Connection: 'keep-alive',
+        'X-Accel-Buffering': 'no',
+      },
     });
   } catch (error) {
     console.error('[Chat] Error:', error);

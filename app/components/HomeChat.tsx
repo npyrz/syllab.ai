@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
@@ -15,6 +15,7 @@ type ClassOption = {
 };
 
 type Message = {
+  id: string;
   role: "user" | "assistant";
   content: string;
   sources?: string[];
@@ -33,6 +34,9 @@ export default function HomeChat({ classes }: { classes: ClassOption[] }) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [streamingMessageId, setStreamingMessageId] = useState<string | null>(null);
+  const streamBufferRef = useRef("");
+  const streamTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const selectedClass = classes.find((course) => course.id === selectedClassId);
 
@@ -40,9 +44,16 @@ export default function HomeChat({ classes }: { classes: ClassOption[] }) {
     if (!input.trim() || !selectedClassId || isLoading) return;
 
     const userMessage = input;
+    const userId = `${Date.now()}-user`;
+    const assistantId = `${Date.now()}-assistant`;
     setInput("");
-    setMessages((prev) => [...prev, { role: "user", content: userMessage }]);
+    setMessages((prev) => [
+      ...prev,
+      { id: userId, role: "user", content: userMessage },
+      { id: assistantId, role: "assistant", content: "", sources: [] },
+    ]);
     setIsLoading(true);
+    setStreamingMessageId(assistantId);
 
     try {
       const response = await fetch("/api/chat", {
@@ -56,26 +67,148 @@ export default function HomeChat({ classes }: { classes: ClassOption[] }) {
 
       if (!response.ok) {
         const error = await response.json();
-        setMessages((prev) => [
-          ...prev,
-          { role: "assistant", content: `Error: ${error.error}` },
-        ]);
+        setMessages((prev) =>
+          prev.map((msg) =>
+            msg.id === assistantId
+              ? { ...msg, content: `Error: ${error.error}` }
+              : msg
+          )
+        );
+        setStreamingMessageId(null);
         return;
       }
 
-      const data = await response.json();
-      setMessages((prev) => [
-        ...prev,
-        { role: "assistant", content: data.response, sources: data.sources ?? [] },
-      ]);
+      const contentType = response.headers.get("content-type") ?? "";
+      if (!contentType.includes("text/event-stream") || !response.body) {
+        const data = await response.json();
+        setMessages((prev) =>
+          prev.map((msg) =>
+            msg.id === assistantId
+              ? { ...msg, content: data.response, sources: data.sources ?? [] }
+              : msg
+          )
+        );
+        return;
+      }
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffered = "";
+
+      const flushBufferedTokens = () => {
+        const bufferedTokens = streamBufferRef.current;
+        if (!bufferedTokens) return;
+        streamBufferRef.current = "";
+
+        setMessages((prev) =>
+          prev.map((msg) =>
+            msg.id === assistantId
+              ? { ...msg, content: `${msg.content}${bufferedTokens}` }
+              : msg
+          )
+        );
+      };
+
+      const ensureFlushTimer = () => {
+        if (streamTimerRef.current) return;
+        streamTimerRef.current = setInterval(flushBufferedTokens, 160);
+      };
+
+      const stopFlushTimer = () => {
+        if (!streamTimerRef.current) return;
+        clearInterval(streamTimerRef.current);
+        streamTimerRef.current = null;
+      };
+
+      const flushEvent = (rawEvent: string) => {
+        const lines = rawEvent.split("\n");
+        let eventName = "message";
+        const dataLines: string[] = [];
+
+        for (const line of lines) {
+          if (line.startsWith("event:")) {
+            eventName = line.slice(6).trim();
+          } else if (line.startsWith("data:")) {
+            dataLines.push(line.slice(5).trim());
+          }
+        }
+
+        if (dataLines.length === 0) return;
+        const payload = JSON.parse(dataLines.join("\n"));
+
+        if (eventName === "token") {
+          streamBufferRef.current += payload.token;
+          ensureFlushTimer();
+          return;
+        }
+
+        if (eventName === "done") {
+          stopFlushTimer();
+          flushBufferedTokens();
+          setMessages((prev) =>
+            prev.map((msg) =>
+              msg.id === assistantId
+                ? {
+                    ...msg,
+                    content: payload.response ?? msg.content,
+                    sources: payload.sources ?? [],
+                  }
+                : msg
+            )
+          );
+          setStreamingMessageId(null);
+          return;
+        }
+
+        if (eventName === "error") {
+          stopFlushTimer();
+          flushBufferedTokens();
+          setMessages((prev) =>
+            prev.map((msg) =>
+              msg.id === assistantId
+                ? {
+                    ...msg,
+                    content: `Error: ${payload.error ?? "Stream failed"}`,
+                  }
+                : msg
+            )
+          );
+          setStreamingMessageId(null);
+        }
+      };
+
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+
+        buffered += decoder.decode(value, { stream: true });
+        const parts = buffered.split("\n\n");
+        buffered = parts.pop() ?? "";
+
+        for (const part of parts) {
+          if (part.trim()) flushEvent(part);
+        }
+      }
+
+      stopFlushTimer();
+      flushBufferedTokens();
     } catch (error) {
       console.error("Chat error:", error);
-      setMessages((prev) => [
-        ...prev,
-        { role: "assistant", content: "Failed to get response. Try again." },
-      ]);
+      if (streamTimerRef.current) {
+        clearInterval(streamTimerRef.current);
+        streamTimerRef.current = null;
+      }
+      streamBufferRef.current = "";
+      setMessages((prev) =>
+        prev.map((msg) =>
+          msg.id === assistantId
+            ? { ...msg, content: "Failed to get response. Try again." }
+            : msg
+        )
+      );
     } finally {
       setIsLoading(false);
+      setStreamingMessageId(null);
     }
   };
 
@@ -93,9 +226,9 @@ export default function HomeChat({ classes }: { classes: ClassOption[] }) {
           </div>
         ) : (
           <div className="flex-1 overflow-y-auto space-y-4 pb-4">
-            {messages.map((msg, idx) => (
+            {messages.map((msg) => (
               <div
-                key={idx}
+                key={msg.id}
                 className={`flex ${
                   msg.role === "user" ? "justify-end" : "justify-start"
                 }`}
@@ -109,11 +242,15 @@ export default function HomeChat({ classes }: { classes: ClassOption[] }) {
                 >
                   {msg.role === "assistant" ? (
                     <div>
-                      <div className="prose prose-sm max-w-none prose-headings:text-[color:var(--app-text)] prose-headings:font-semibold prose-headings:mt-4 prose-headings:mb-2 prose-p:leading-relaxed prose-li:leading-relaxed prose-strong:text-cyan-300 prose-code:text-cyan-300 prose-code:bg-[color:var(--app-panel)] prose-code:rounded prose-code:px-1 prose-code:py-0.5 prose-a:text-cyan-300">
-                        <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                          {msg.content}
-                        </ReactMarkdown>
-                      </div>
+                      {msg.content.trim().length === 0 && msg.id === streamingMessageId ? (
+                        <div className="text-sm text-[color:var(--app-subtle)]">Thinking...</div>
+                      ) : (
+                        <div className="prose prose-sm max-w-none prose-headings:text-[color:var(--app-text)] prose-headings:font-semibold prose-headings:mt-4 prose-headings:mb-2 prose-p:leading-relaxed prose-li:leading-relaxed prose-strong:text-cyan-300 prose-code:text-cyan-300 prose-code:bg-[color:var(--app-panel)] prose-code:rounded prose-code:px-1 prose-code:py-0.5 prose-a:text-cyan-300">
+                          <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                            {msg.content}
+                          </ReactMarkdown>
+                        </div>
+                      )}
                       {msg.sources && msg.sources.length > 0 && (
                         <div className="mt-3 flex flex-wrap gap-2 border-t border-[color:var(--app-border)] pt-3">
                           {msg.sources.map((src, i) => (
@@ -136,13 +273,6 @@ export default function HomeChat({ classes }: { classes: ClassOption[] }) {
                 </div>
               </div>
             ))}
-            {isLoading && (
-              <div className="flex justify-start">
-                <div className="bg-[color:var(--app-surface)] text-[color:var(--app-subtle)] rounded-2xl px-4 py-3 ring-1 ring-[color:var(--app-border)]">
-                  Thinking...
-                </div>
-              </div>
-            )}
           </div>
         )}
 
