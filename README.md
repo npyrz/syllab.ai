@@ -23,16 +23,21 @@ AI-powered class management built with Next.js App Router, NextAuth, Prisma, and
   - Upload class documents (`pdf`, `docx`, `doc`) up to 10MB
   - Blob storage upload via Vercel Blob
   - Server-side text extraction (PDF via `pdfjs-dist`, DOCX via `mammoth`)
+  - Timeout guardrails for blob fetch + extraction to avoid stuck processing
+  - Resilient PDF extraction with invalid-page early stop and reduced warning noise
   - Document status lifecycle: `pending -> processing -> done/failed`
   - Original blob reference cleared after extraction (`storageKey` set to `null`)
-  - Document delete API + class-scoped document list UI
+  - Document delete API + class-scoped document list UI (ready docs shown)
+  - Unified uploader-owned loading state until processing completes
 - AI class chat (`/api/chat`)
   - Uses only authenticated user + selected class documents
-  - Groq AI SDK call with model from `GROQ_CHAT_MODEL` (fallback: `llama-3.3-70b-versatile`)
+  - Native Groq SDK streaming call with model from `GROQ_CHAT_MODEL` (fallback: `llama-3.3-70b-versatile`)
+  - Chat tuning via env: `GROQ_CHAT_TEMPERATURE`, `GROQ_CHAT_REASONING_EFFORT`
   - Daily usage quotas (per-user + global) enforced in DB
-  - Source filename attribution returned to UI (ranked relevance)
+  - Source filename attribution streamed via end-of-response metadata marker
 - Weekly schedule dashboard
   - AI-generated “This week” + “Upcoming” cards from schedule/syllabus text
+  - Schedule tuning via env: `GROQ_SCHEDULE_TEMPERATURE`, `GROQ_SCHEDULE_REASONING_EFFORT`
   - Week cache persisted in `WeekSchedule` table with fingerprints
   - Auto week rollover via Sunday boundary based on `currentWeekSetAt`
   - Primed after schedule/syllabus processing and when current week is updated
@@ -70,7 +75,7 @@ AI-powered class management built with Next.js App Router, NextAuth, Prisma, and
 - NextAuth v5 beta
 - Prisma 7 + PostgreSQL
 - Vercel Blob
-- AI SDK + Groq provider
+- Groq SDK
 
 ## Important Implementation Notes
 
@@ -82,8 +87,6 @@ AI-powered class management built with Next.js App Router, NextAuth, Prisma, and
 
 ## Upcoming Features
 
-- Streaming chat responses
-  - Stream assistant output token-by-token so answers appear in real time.
 - Phone-friendly chat and class experience
   - Improve responsive layout and controls for mobile screens.
 - Token usage visibility in chat UI
@@ -92,14 +95,10 @@ AI-powered class management built with Next.js App Router, NextAuth, Prisma, and
   - Improve message spacing, readability, and interaction flow.
 - Chat response quality improvements
   - Improve prompts/context handling for clearer, more accurate answers.
-- Schedule extraction reliability fixes
-  - Improve parsing robustness for varied syllabus/schedule formats.
 - Auto-detect current week from document dates
   - Remove manual “what week are you in?” step and infer week from syllabus/schedule date anchors.
 - Open uploaded files directly in the app
   - Let users view submitted files from the website without leaving the product.
-- Better upload/extraction loading states
-  - Add clearer progress and processing states for uploads and text extraction.
 - Lecture notes ingestion + readability pass
   - Upload lecture notes and auto-convert into cleaner, easier-to-read study notes.
 - Study material generation from lecture content
