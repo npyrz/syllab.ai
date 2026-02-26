@@ -286,9 +286,6 @@ ${context}
         ? { reasoning_effort: CHAT_REASONING_EFFORT }
         : {}),
       stream: true,
-      stream_options: {
-        include_usage: true,
-      },
       messages: [
         { role: 'system', content: systemPrompt },
         { role: 'user', content: message },
@@ -339,10 +336,6 @@ ${context}
         try {
           for await (const chunk of completion) {
             if (isCancelled) return;
-
-            if (typeof chunk.usage?.total_tokens === 'number') {
-              totalTokens = chunk.usage.total_tokens;
-            }
 
             const token = chunk.choices?.[0]?.delta?.content ?? '';
             if (!token) continue;
