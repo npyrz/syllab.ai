@@ -1,219 +1,303 @@
 # System Design: syllab.ai
 
 ## 1) Overview
-syllab.ai is a Next.js App Router application that provides authenticated access to class creation, document upload, and AI-powered class insights. Users upload documents (syllabi, schedules, etc.), system extracts and stores the text, and Groq API generates responses based **only** on that user's documents. Each user has isolated document context for privacy and accuracy.
 
-## 2) Goals
-- Provide secure authentication and protected routes.
-- Allow users to create classes and upload associated files.
-- Extract and store document text linked to the user.
-- Enable user-scoped AI insights via Groq API (model only accesses that user's documents).
-- Maintain privacy: no cross-user data leakage.
-- Scalable, modular architecture for future enhancements.
+syllab.ai is a Next.js App Router application for student class management. Users authenticate, create classes, upload course documents, and receive AI-powered answers and weekly schedule dashboards generated from extracted class materials.
 
-Non-goals (current scope):
-- Vector embeddings or semantic search (store raw extracted text for now).
-- Advanced document processing (PDF/DOCX extraction only).
+The platform is user-scoped by design: data retrieval and AI context construction are filtered by authenticated `userId` and (for chat) selected `classId`.
+
+## 2) Product Goals
+
+- Provide secure authentication and route/API protection.
+- Let users manage classes and documents in one workflow.
+- Extract and store text from uploaded files for downstream AI use.
+- Deliver class-specific AI chat and weekly planning views.
+- Track and enforce AI usage limits to control spend.
+- Keep architecture modular for future improvements.
 
 ## 3) High-Level Architecture
-**Client (Browser)**
-- Next.js React UI (App Router, client components)
-- Form-driven workflows for class creation and uploads
 
-**Application Server (Next.js)**
-- API routes under `app/api/*` for server-side handling
-- NextAuth-based auth handler with DB-backed user records
+### Client Layer
 
-**Database (PostgreSQL + Prisma)**
-- User persistence and class/document records
+- React components under Next.js App Router (`app/*`)
+- Server components for data-backed pages
+- Client components for uploads, chat, and interactive controls
 
-**External Services**
-- Google OAuth (optional)
-- Vercel Blob (object storage)
-- Document processing workers (background)
-- Groq API (LLM)
+### Application Layer
 
-```
-Browser
-  └─> Next.js App Router
-       ├─ UI Routes (app/*)
-       ├─ API Routes (app/api/*)
-       └─ Auth (NextAuth)
-             └─ Prisma Client
-                  └─ PostgreSQL
-```
+- Route handlers under `app/api/*/route.ts`
+- NextAuth configuration in `auth.ts`
+- Server actions for small user profile updates (timezone/theme/lastSeen)
 
-## 4) Current Components
-### 4.1 Frontend
-- Root layout and shared shell (sidebar + header).
-- Routes:
-  - `/` (landing)
-  - `/home` (authenticated chat-style home)
-  - `/signin`, `/signup` (custom auth UI)
-  - `/classes/new` (class creation form)
-  - `/classes/[id]` (class details + documents list + chat input)
-- Key components:
-  - `CreateClassForm` (client form, file selection, post to API)
+### Data Layer
 
-### 4.2 Backend
-- Auth handler at `app/api/auth/[...nextauth]/route.ts` via `auth.ts` configuration.
-- Classes API at `app/api/classes/route.ts` (authenticated `GET` and `POST`).
-- Documents API at `app/api/documents/route.ts` (authenticated `GET` and `POST`).
-- Chat API at `app/api/chat/route.ts` (authenticated `POST`).
+- Prisma ORM with PostgreSQL
+- Core entities: users, classes, documents, weekly schedules, usage counters
 
-### 4.3 Data Layer
-- Prisma schema in `prisma/schema.prisma`.
-- `User` model is the primary model in use.
-- `Post` is present as a placeholder/example model.
+### External Services
 
-## 5) Authentication & Authorization
-- NextAuth configured with:
-  - Credentials provider for email/password
-  - Google OAuth provider (optional, controlled by environment variables)
-- User creation and updates occur in JWT callback after successful sign-in.
-- Session includes the `user.id` persisted from the DB.
-- API routes enforce auth by calling `auth()` and checking session.
+- Groq (AI inference via AI SDK)
+- Vercel Blob (temporary uploaded file storage before extraction)
 
-## 6) Data Model (Updated)
-**User**
-- `id` (cuid)
-- `username` (unique)
-- `email` (unique)
-- `name`, `image`, `passwordHash`
-- `provider`, `lastLoginAt`, `lastSeenAt`
-- `createdAt`, `updatedAt`
+## 4) Current UI/UX Surface
 
-**Class**
-- `id` (cuid)
-- `userId` (FK -> User)
-- `title`
-- `description?`
-- `createdAt`, `updatedAt`
+### Primary Routes
 
-**Document**
-- `id` (cuid)
-- `classId` (FK -> Class)
-- `userId` (FK -> User)
-- `filename`, `mimeType`, `sizeBytes`
-- `storageKey` (object storage key, nullable after extraction)
-- `status` (`pending` | `processing` | `done` | `failed`)
-- `textExtracted` (nullable, stored cleaned text)
-- `createdAt`, `updatedAt`, `processedAt?`
+- `/` and `/home`
+  - Landing view for signed-out users
+  - If signed-in with existing classes, renders class chat hub
+- `/signin`
+  - Credentials + optional Google OAuth sign-in
+  - Includes timezone capture field for credentials flow
+- `/signup`
+  - Credentials account creation with username + timezone
+- `/classes/new`
+  - Create class + upload syllabus/schedule/misc docs
+  - Shows current week verifier when schedule-like docs are uploaded
+- `/classes/[id]`
+  - Class detail view with:
+    - Weekly dashboard (This Week + Upcoming)
+    - Extracted highlights from processed docs
+    - Document list + delete
+    - Document uploader
+    - Class delete action
 
-**Upload** (optional helper)
-- `id` (cuid)
-- `documentId` (FK -> Document)
-- `status` (`pending` | `processing` | `done` | `failed`)
-- `createdAt`, `updatedAt`
+### Persistent Shell
 
-## 7) Key Flows
-### 7.1 Sign-in (Credentials)
-1. User submits email/password on `/signin`.
-2. NextAuth verifies via `prisma.user.findUnique` and password hash.
-3. JWT callback persists user metadata and session includes `user.id`.
+- Global layout with sidebar and header
+- Sidebar class quick links
+- Theme toggle (light/dark)
+- Profile menu + sign out
+- Background sync components:
+  - `LastSeenPing`
+  - `TimezoneSync`
 
-### 7.2 Sign-in (Google OAuth)
-1. User completes OAuth flow.
-2. JWT callback finds or creates a user:
-   - Username derived from email and de-duplicated.
-3. Session includes `user.id`.
+## 5) Authentication & Session Model
 
-### 7.3 Create Class
-1. User fills out `/classes/new` and selects files.
-2. Client submits JSON to `POST /api/classes`.
-3. Client uploads selected files to `POST /api/documents` with `classId`.
-4. API stores files to Vercel Blob, extracts text, and updates document status.
+Implemented with NextAuth v5 beta:
 
-## 8) Document Ingestion & Processing Pipeline
-**Core Principle:** Extract text, link to user, serve context-specific AI responses.
+- Providers
+  - Credentials provider (email/password)
+  - Google provider when `AUTH_GOOGLE_ID` + `AUTH_GOOGLE_SECRET` exist
+- Credentials authorize flow
+  - Verifies user/password hash
+  - Validates timezone and updates user timezone when provided
+- JWT/session callbacks
+  - On sign-in, upserts/updates DB user metadata
+  - For new OAuth users, auto-generates unique username from email prefix
+  - Persists DB user id to token and `session.user.id`
 
-High-level workflow:
-1. **Upload**: User uploads document to `POST /api/documents` (authenticated).
-2. **Store**: API creates `Document` record with `status: pending` and saves file to Vercel Blob with `storageKey`.
-3. **Extract** (background worker):
-  - Read file from `uploads/`.
-  - Extract text (PDF via `pdfjs-dist`, DOCX via `mammoth`).
-  - Clean/normalize text (remove headers, footers, extra whitespace).
-  - Store in `Document.textExtracted`.
-  - Update `status: done` or `status: failed`.
-4. **Cache**: User's extracted text lives in DB, indexed by `userId` for fast retrieval.
-5. **Delete Original**: After successful extraction, clear `storageKey` (original blob no longer referenced).
+## 6) API Surface (Current)
 
-**Privacy Guarantee:** Every API query to Groq is scoped by `userId`:
-- Fetch all `Document` records where `userId = sessionUser.id`.
-- Concatenate their `textExtracted` into a context string.
-- Pass to Groq with system prompt: *"You are a helpful assistant for this user's class materials. Only reference information from the provided documents."*
-- Return response to user only.
+### Auth
 
-## 9) AI Query Flow (Groq API)
-1. User submits query in UI (e.g., "Summarize the syllabus").
-2. Client calls `POST /api/chat` (authenticated).
-3. API retrieves session `user.id` and fetches class-scoped documents:
-  ```sql
-  SELECT textExtracted FROM Document WHERE userId = $1 AND classId = $2 AND status = 'done'
-  ```
-4. Concatenate texts into context (limit size to fit Groq token limits).
-5. Call Groq with:
-  - System prompt: "Answer only from provided documents and format as TL;DR, Details, Source."
-  - User message: Query + concatenated document text.
-6. Return Groq response to client.
-7. Log query + response for auditing (optional).
+- `GET/POST /api/auth/[...nextauth]`
 
-**Key Security:** No user can see another user's documents or context. Queries are always filtered by `userId`.
+### Classes
 
-## 10) Security & Privacy
-- **Authentication**: Required on all API routes. Check `auth()` session.
-- **Authorization**: Every query checks `userId` ownership:
-  - `GET /api/documents` → only return docs where `userId = session.user.id`.
-  - `POST /api/chat` → only use docs where `userId = session.user.id`.
-- **Data Isolation**: Groq context includes only that user's extracted text.
-- **Credential Safety**: Groq API key stored in env vars, server-side only.
-- **File Retention**: Delete original files after extraction or set TTL to minimize storage.
-- **Passwords**: Hashed with bcryptjs.
-- **OAuth Secrets**: Stored in env vars, never logged.
+- `GET /api/classes`
+  - Returns session user’s classes with document counts
+- `POST /api/classes`
+  - Creates class
+- `DELETE /api/classes`
+  - Deletes owned class (cascade deletes related entities via DB relations)
+- `PATCH /api/classes`
+  - Updates `currentWeek` (bounded 1..20)
+  - Sets `currentWeekSetAt`
+  - Primes current week schedule cache in background
 
-## 11) Scalability Considerations
-- **Stateless API**: All routes can scale horizontally on Vercel or K8s.
-- **Background Processing**: Use workers (BullMQ, Vercel Functions, or Trigger.dev) to avoid blocking uploads.
-- **Database Indexes**: `Document(userId, status)` for fast doc retrieval in AI queries.
-- **Text Storage**: Store in DB for simplicity. For large corpora, migrate to vector DB later.
-- **Groq Rate Limits**: Implement user-level request throttling to avoid quota issues.
-- **Usage Quotas**: Add per-user AI usage caps; payments later.
+### Documents
 
-## 12) Data Model Details
-**User** (no changes to auth model)
-- All fields as defined in Prisma schema.
+- `GET /api/documents`
+  - Lists owned docs, optional `classId` filter
+- `POST /api/documents`
+  - Validates ownership, file type, and max size
+  - Uploads to Vercel Blob
+  - Creates `Document` row with inferred/explicit `docType`
+  - If schedule doc, writes `Class.scheduleId`
+  - Triggers `processDocument(documentId)`
+- `DELETE /api/documents`
+  - Deletes owned doc by id
+- `GET /api/documents/[id]`
+  - Returns owned single doc
 
-**Class** (scoped per user)
-- User can only see/modify classes where `userId = session.user.id`.
+### Chat
 
-**Document** (scoped per user)
-- `textExtracted`: Raw or cleaned text from the file (stored in DB for now).
-- `storageKey`: Reference to original file in S3/R2 (for recovery/audit).
-- `status`: Controls whether text is used in AI queries (`done` only).
-- Index: `(userId, status)` for fast `SELECT textExtracted WHERE userId = ? AND status = 'done'`.
+- `POST /api/chat`
+  - Requires auth + class ownership
+  - Loads class-scoped processed document text
+  - Builds system prompt with document context
+  - Calls Groq model via AI SDK
+  - Applies request/token quota checks (user daily + global daily)
+  - Stores usage increments after response
+  - Returns response + ranked source filenames
 
-## 13) Deployment & Infrastructure
-- **Next.js**: Vercel (or self-hosted Node.js).
-- **PostgreSQL**: Managed service (AWS RDS, Heroku, Railway, etc.).
-- **Object Storage**: Vercel Blob (current), future S3/R2 possible.
-- **Background Jobs**: Vercel Functions, Trigger.dev, or BullMQ with Redis.
-- **Groq API Key**: Store in Vercel environment variables.
-- **Environment Variables**:
-  - `AUTH_SECRET`, `DATABASE_URL`, `AUTH_GOOGLE_ID`, `AUTH_GOOGLE_SECRET`
+### Schedule Refresh (Cron)
+
+- `POST /api/schedules/refresh`
+  - Optional bearer auth via `CRON_SECRET`
+  - Precomputes next week schedule for active classes
+
+## 7) Document Ingestion & Processing Pipeline
+
+1. Client uploads file via `/api/documents`.
+2. Route stores blob and creates `Document(status=pending)`.
+3. `processDocument` updates to `processing`.
+4. Downloads blob, extracts text:
+   - PDF -> `pdfjs-dist`
+   - DOC/DOCX -> `mammoth`
+5. Optional schedule-specific metadata extraction to `weeklyInfo`.
+6. Deletes original blob object (best effort).
+7. Updates document:
+   - `textExtracted`
+   - `storageKey = null`
+   - `status = done` or `failed`
+8. If doc is syllabus/schedule, attempts schedule priming.
+
+## 8) Weekly Schedule Generation Design
+
+### Inputs
+
+- Class `currentWeek` + anchor date (`currentWeekSetAt` / `createdAt`)
+- Schedule document text (preferred from `Class.scheduleId`, fallback by doc type/filename)
+- Optional syllabus hints
+
+### Generation Strategy
+
+- Compute effective week with Sunday-boundary rollover.
+- Parse structured week rows from schedule text.
+- Call Groq model with strict JSON schema expectation.
+- Normalize/fallback if model output is partial or invalid.
+- Persist schedule to `WeekSchedule` table keyed by fingerprints:
+  - `scheduleFingerprint`
+  - `syllabusFingerprint`
+
+### Output Used by UI
+
+- `days[]` for “This week” cards
+- `upcoming[]` for top upcoming items
+
+## 9) Chat & Quota Enforcement
+
+### Context Isolation
+
+- Fetches only documents where:
+  - `userId = session.user.id`
+  - `classId = selected class`
+  - `status = done`
+  - `textExtracted IS NOT NULL`
+
+### Quota Model
+
+- User daily counters (`ApiUsageDaily`) keyed by `(userId, windowStart)` where `windowStart` is user timezone day start
+- Global daily counters (`ApiUsageGlobalDaily`) keyed by UTC day start
+- Limits currently enforced:
+  - User requests/day: 1000
+  - User tokens/day: 200,000
+  - Global requests/day: 1000
+  - Global tokens/day: 200,000
+
+## 10) Data Model (Prisma)
+
+### User
+
+- Identity + auth metadata (`username`, `email`, `passwordHash`, `provider`)
+- Preferences (`theme`, `timezone`)
+- Activity timestamps (`lastLoginAt`, `lastSeenAt`)
+
+### Class
+
+- Owned by user
+- Core fields: `title`, `description`
+- Week state: `currentWeek`, `currentWeekSetAt`
+- Optional schedule pointer: `scheduleId`
+
+### Document
+
+- Linked to class + user
+- Metadata: filename, type, size, `docType`
+- Processing state: `status`, `processedAt`
+- Extracted content: `textExtracted`
+- Optional schedule metadata/cache fields: `weeklyInfo`, `scheduleCache`
+
+### WeekSchedule
+
+- Materialized weekly dashboard cache by class/week/fingerprint
+- Stores normalized `days` and `upcoming` JSON payloads
+- Includes generation model + timestamp fields
+
+### Usage Counters
+
+- `ApiUsageDaily`
+- `ApiUsageGlobalDaily`
+
+## 11) Security & Isolation
+
+- Auth required on protected API routes.
+- Ownership checks enforced for class/document reads and writes.
+- Chat only includes class + user scoped documents.
+- Secrets remain server-side in env vars.
+- Passwords hashed with `bcryptjs`.
+
+## 12) Runtime & Deployment Notes
+
+- Stateless API routes (horizontal scaling friendly)
+- Prisma for DB abstraction
+- Build/deploy target: Next.js production runtime
+- Optional cron integration for schedule precomputation via `/api/schedules/refresh`
+
+## 13) Environment Variables
+
+- Required:
+  - `AUTH_SECRET`
+  - `DATABASE_URL`
   - `GROQ_API_KEY`
-  - `S3_BUCKET`, `S3_REGION`, `S3_ACCESS_KEY`, `S3_SECRET_KEY` (or R2 equivalents)
+- Optional feature/config vars:
+  - `AUTH_GOOGLE_ID`, `AUTH_GOOGLE_SECRET`
+  - `GROQ_CHAT_MODEL`
+  - `GROQ_SCHEDULE_MODEL`
+  - `GROQ_MODEL`
+  - `GROQ_FALLBACK_MODEL`
+  - `CRON_SECRET`
+  - `BLOB_READ_WRITE_TOKEN` (for local/non-managed blob auth scenarios)
 
-## 14) Next Steps
-1. Improve chat responses (TL;DR, sources, better formatting).
-2. UI fixes for classes and class dashboard.
-3. Manage documents on class tab (status, delete, reprocess).
-4. Upload lecture slides and materials to create study material.
-5. Add upcoming assignments and this-week views on class pages.
-6. Add AI usage quotas (payments later).
-6. Rate limiting + audit logging.
-7. Tests + error handling.
+## 14) Known Constraints (Current)
 
----
-**Document status:** Updated system design with user-scoped document extraction and AI queries (February 4, 2026).
-=
+- Document processing is currently invoked inline from upload route (not queue-backed yet).
+- Chat context is raw concatenated extracted text (no vector retrieval yet).
+- Quota thresholds are fixed constants in route logic.
+
+## 15) Upcoming Features Roadmap
+
+### 15.1 Lecture Notes -> Readable Notes
+
+- Goal: allow uploading lecture notes and generate cleaner, more readable study notes.
+- Planned approach:
+  - Add a notes transformation stage after extraction.
+  - Store normalized/rewritten notes as class-linked artifacts.
+  - Surface readable notes in class detail UI.
+
+### 15.2 Lecture Material -> Quizzes & Flashcards
+
+- Goal: generate active-recall study tools from lecture materials.
+- Planned approach:
+  - Add a generation pipeline that produces quiz items and flashcards.
+  - Persist generated items per class/week/topic for reuse.
+  - Expose review UI for practicing and regenerating sets.
+
+### 15.3 Personal Notes
+
+- Goal: let users add their own notes to each class.
+- Planned approach:
+  - Add CRUD support for personal notes scoped by `userId` + `classId`.
+  - Include user notes as optional context in AI responses.
+  - Keep personal notes visually separate from uploaded document extracts.
+
+### 15.4 Weekly Web Resource Discovery
+
+- Goal: when syllabus/schedule highlights weekly material, find useful external resources.
+- Planned approach:
+  - Detect highlighted weekly topics from schedule/syllabus extraction.
+  - Run a web discovery pass for trusted learning resources.
+  - Store curated links with summary metadata per week/class.
+  - Present suggested resources in the weekly dashboard alongside “This week” and “Upcoming”.
