@@ -4,7 +4,6 @@ import { useState } from "react";
 
 type SemesterWeekVerifierProps = {
   isOpen: boolean;
-  onClose: () => void;
   onVerify: (currentWeek: number) => Promise<void>;
 };
 
@@ -12,7 +11,6 @@ const WEEKS = Array.from({ length: 20 }, (_, i) => i + 1);
 
 export default function SemesterWeekVerifier({
   isOpen,
-  onClose,
   onVerify,
 }: SemesterWeekVerifierProps) {
   const [currentWeek, setCurrentWeek] = useState(1);
@@ -28,18 +26,13 @@ export default function SemesterWeekVerifier({
 
     try {
       await onVerify(currentWeek);
-      handleClose();
+      setCurrentWeek(1);
+      setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to verify week");
     } finally {
       setIsSubmitting(false);
     }
-  };
-
-  const handleClose = () => {
-    setCurrentWeek(1);
-    setError(null);
-    onClose();
   };
 
   return (
@@ -77,15 +70,7 @@ export default function SemesterWeekVerifier({
           </div>
         ) : null}
 
-        <div className="mt-5 flex items-center justify-end gap-3">
-          <button
-            type="button"
-            onClick={handleClose}
-            disabled={isSubmitting}
-            className="rounded-full bg-[color:var(--app-panel)] px-3.5 py-2 text-xs font-medium text-[color:var(--app-text)] ring-1 ring-[color:var(--app-border)] transition hover:bg-[color:var(--app-elevated)] disabled:opacity-50"
-          >
-            Skip
-          </button>
+        <div className="mt-5 flex items-center justify-end">
           <button
             type="button"
             onClick={handleSubmit}

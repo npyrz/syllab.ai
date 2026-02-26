@@ -21,6 +21,24 @@ type Message = {
   sources?: string[];
 };
 
+function formatLimitMessage(error: {
+  error?: string;
+  retryAt?: string;
+  retryAfterSeconds?: number;
+}) {
+  const base = error?.error ?? "Daily usage limit reached.";
+  if (!error?.retryAt) {
+    return `Usage limit reached. ${base}`;
+  }
+
+  const date = new Date(error.retryAt);
+  if (Number.isNaN(date.getTime())) {
+    return `Usage limit reached. ${base}`;
+  }
+
+  return `Usage limit reached. ${base} You can try again after ${date.toLocaleString()}.`;
+}
+
 function getInitials(title: string) {
   const words = title.trim().split(/\s+/).filter(Boolean);
   const initials = words.slice(0, 2).map((word) => word[0]?.toUpperCase());
@@ -70,7 +88,13 @@ export default function HomeChat({ classes }: { classes: ClassOption[] }) {
         setMessages((prev) =>
           prev.map((msg) =>
             msg.id === assistantId
-              ? { ...msg, content: `Error: ${error.error}` }
+              ? {
+                  ...msg,
+                  content:
+                    response.status === 429
+                      ? formatLimitMessage(error)
+                      : `Error: ${error.error}`,
+                }
               : msg
           )
         );

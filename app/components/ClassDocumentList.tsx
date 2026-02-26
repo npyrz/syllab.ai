@@ -12,6 +12,11 @@ type DocumentItem = {
 };
 
 function formatStatus(status: string) {
+  if (status === "pending") return "Queued For Extraction";
+  if (status === "processing") return "Extracting Text";
+  if (status === "done") return "Ready";
+  if (status === "failed") return "Extraction Failed";
+
   return status
     .replace(/_/g, " ")
     .replace(/\b\w/g, (char) => char.toUpperCase());

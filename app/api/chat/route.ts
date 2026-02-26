@@ -11,6 +11,7 @@ const USER_DAILY_REQUEST_LIMIT = 1000;
 const USER_DAILY_TOKEN_LIMIT = 200_000;
 const GLOBAL_DAILY_REQUEST_LIMIT = 1000;
 const GLOBAL_DAILY_TOKEN_LIMIT = 200_000;
+const IS_DEV = process.env.NODE_ENV === 'development';
 
 const SOURCE_STOP_WORDS = new Set([
   'the', 'and', 'that', 'with', 'this', 'from', 'your', 'you', 'for', 'are', 'was', 'were',
@@ -81,6 +82,35 @@ function getDayStartForTimeZone(date: Date, timeZone: string) {
   } catch {
     return getUtcDayStart(date);
   }
+}
+
+function quotaResponse(params: {
+  message: string;
+  code:
+    | 'USER_DAILY_REQUEST_LIMIT'
+    | 'USER_DAILY_TOKEN_LIMIT'
+    | 'GLOBAL_DAILY_REQUEST_LIMIT'
+    | 'GLOBAL_DAILY_TOKEN_LIMIT';
+  retryAt: Date;
+}) {
+  const now = Date.now();
+  const retryAtMs = params.retryAt.getTime();
+  const retryAfterSeconds = Math.max(1, Math.ceil((retryAtMs - now) / 1000));
+
+  return NextResponse.json(
+    {
+      error: params.message,
+      code: params.code,
+      retryAt: params.retryAt.toISOString(),
+      retryAfterSeconds,
+    },
+    {
+      status: 429,
+      headers: {
+        'Retry-After': String(retryAfterSeconds),
+      },
+    }
+  );
 }
 
 /**
@@ -176,6 +206,8 @@ ${context}
     const userTimeZone = userRecord?.timezone ?? 'UTC';
     const userDayStart = getDayStartForTimeZone(now, userTimeZone);
     const globalDayStart = getUtcDayStart(now);
+    const userRetryAt = new Date(userDayStart.getTime() + 24 * 60 * 60 * 1000);
+    const globalRetryAt = new Date(globalDayStart.getTime() + 24 * 60 * 60 * 1000);
 
     const [userUsage, globalUsage] = await Promise.all([
       prisma.apiUsageDaily.upsert({
@@ -198,32 +230,38 @@ ${context}
       }),
     ]);
 
-    if (userUsage.requestCount >= USER_DAILY_REQUEST_LIMIT) {
-      return NextResponse.json(
-        { error: 'Daily request limit reached. Try again tomorrow.' },
-        { status: 429 }
-      );
-    }
+    if (!IS_DEV) {
+      if (userUsage.requestCount >= USER_DAILY_REQUEST_LIMIT) {
+        return quotaResponse({
+          message: 'Daily request limit reached. Try again tomorrow.',
+          code: 'USER_DAILY_REQUEST_LIMIT',
+          retryAt: userRetryAt,
+        });
+      }
 
-    if (userUsage.tokenCount >= USER_DAILY_TOKEN_LIMIT) {
-      return NextResponse.json(
-        { error: 'Daily token limit reached. Try again tomorrow.' },
-        { status: 429 }
-      );
-    }
+      if (userUsage.tokenCount >= USER_DAILY_TOKEN_LIMIT) {
+        return quotaResponse({
+          message: 'Daily token limit reached. Try again tomorrow.',
+          code: 'USER_DAILY_TOKEN_LIMIT',
+          retryAt: userRetryAt,
+        });
+      }
 
-    if (globalUsage.requestCount >= GLOBAL_DAILY_REQUEST_LIMIT) {
-      return NextResponse.json(
-        { error: 'Global request limit reached. Try again tomorrow.' },
-        { status: 429 }
-      );
-    }
+      if (globalUsage.requestCount >= GLOBAL_DAILY_REQUEST_LIMIT) {
+        return quotaResponse({
+          message: 'Global request limit reached. Try again tomorrow.',
+          code: 'GLOBAL_DAILY_REQUEST_LIMIT',
+          retryAt: globalRetryAt,
+        });
+      }
 
-    if (globalUsage.tokenCount >= GLOBAL_DAILY_TOKEN_LIMIT) {
-      return NextResponse.json(
-        { error: 'Global token limit reached. Try again tomorrow.' },
-        { status: 429 }
-      );
+      if (globalUsage.tokenCount >= GLOBAL_DAILY_TOKEN_LIMIT) {
+        return quotaResponse({
+          message: 'Global token limit reached. Try again tomorrow.',
+          code: 'GLOBAL_DAILY_TOKEN_LIMIT',
+          retryAt: globalRetryAt,
+        });
+      }
     }
 
     const result = await streamText({
