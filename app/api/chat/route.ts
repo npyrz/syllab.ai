@@ -156,13 +156,14 @@ ${context}
 - Be conversational, warm, and helpful — like a smart classmate explaining things.
 - Use clean **Markdown** formatting: headings (##), **bold** for key terms, bullet lists, and numbered steps where they help.
 - Keep answers concise but complete. Avoid walls of text.
+              const userId = session.user.id as string;
 - Paraphrase and synthesize — do NOT copy-paste from the documents.
 - Use concrete examples and plain language. Avoid unnecessary jargon.
 - If the answer isn't in the documents, say so honestly.
 - Do NOT include source citations or document references in your response — those are handled separately by the app.
 - Never output XML tags, raw document text, or reasoning scaffolding. Just give a clean, readable answer.`;
 
-    console.log(`[Chat] Processing query for class ${classId}: "${message}"`);
+              if (!classRecord || classRecord.userId !== userId) {
     console.log(`[Chat] Using context from ${documents.length} document(s)`);
 
     const userRecord = await prisma.user.findUnique({
@@ -173,7 +174,7 @@ ${context}
     const now = new Date();
     const userTimeZone = userRecord?.timezone ?? 'UTC';
     const userDayStart = getDayStartForTimeZone(now, userTimeZone);
-    const globalDayStart = getUtcDayStart(now);
+                  userId: userId,
 
     const [userUsage, globalUsage] = await Promise.all([
       prisma.apiUsageDaily.upsert({
@@ -207,14 +208,6 @@ ${context}
       return NextResponse.json(
         { error: 'Daily token limit reached. Try again tomorrow.' },
         { status: 429 }
-      );
-    }
-
-    if (globalUsage.requestCount >= GLOBAL_DAILY_REQUEST_LIMIT) {
-      return NextResponse.json(
-        { error: 'Global request limit reached. Try again tomorrow.' },
-        { status: 429 }
-      );
     }
 
     if (globalUsage.tokenCount >= GLOBAL_DAILY_TOKEN_LIMIT) {
