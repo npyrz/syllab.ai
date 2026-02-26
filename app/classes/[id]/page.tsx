@@ -432,7 +432,7 @@ export default async function ClassDetailPage({
 
           <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,0.8fr)]">
             <div>
-              <ClassDocumentList documents={documents} />
+              <ClassDocumentList classId={classRecord.id} documents={documents} />
             </div>
             <div>
               <ClassDocumentUploader classId={classRecord.id} />

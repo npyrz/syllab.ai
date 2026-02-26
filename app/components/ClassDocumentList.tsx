@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 
 type DocumentItem = {
@@ -11,17 +11,6 @@ type DocumentItem = {
   processedAt: string | Date | null;
 };
 
-function formatStatus(status: string) {
-  if (status === "pending") return "Queued For Extraction";
-  if (status === "processing") return "Extracting Text";
-  if (status === "done") return "Ready";
-  if (status === "failed") return "Extraction Failed";
-
-  return status
-    .replace(/_/g, " ")
-    .replace(/\b\w/g, (char) => char.toUpperCase());
-}
-
 function formatDate(value: string | Date | null) {
   if (!value) return null;
   const date = typeof value === "string" ? new Date(value) : value;
@@ -30,8 +19,10 @@ function formatDate(value: string | Date | null) {
 }
 
 export default function ClassDocumentList({
+  classId,
   documents,
 }: {
+  classId: string;
   documents: DocumentItem[];
 }) {
   const router = useRouter();
@@ -41,6 +32,8 @@ export default function ClassDocumentList({
   const [error, setError] = useState<string | null>(null);
 
   const hasItems = items.length > 0;
+  const hasProcessing = items.some((item) => item.status === "pending" || item.status === "processing");
+  const hasFailed = items.some((item) => item.status === "failed");
 
   const orderedItems = useMemo(
     () =>
@@ -51,6 +44,47 @@ export default function ClassDocumentList({
       }),
     [items]
   );
+
+  useEffect(() => {
+    setItems(documents);
+  }, [documents]);
+
+  useEffect(() => {
+    if (!hasProcessing) return;
+
+    let isMounted = true;
+    const interval = setInterval(async () => {
+      try {
+        const response = await fetch(`/api/documents?classId=${encodeURIComponent(classId)}`, {
+          method: "GET",
+          cache: "no-store",
+        });
+
+        if (!response.ok) return;
+        const payload = await response.json();
+        const docs = Array.isArray(payload?.documents) ? payload.documents : [];
+
+        const mapped: DocumentItem[] = docs.map((doc: Record<string, unknown>) => ({
+          id: String(doc.id ?? ""),
+          filename: String(doc.filename ?? "Untitled"),
+          status: String(doc.status ?? "pending"),
+          createdAt: String(doc.createdAt ?? new Date().toISOString()),
+          processedAt: (doc.processedAt as string | null) ?? null,
+        }));
+
+        if (isMounted) {
+          setItems(mapped);
+        }
+      } catch {
+        // Ignore transient polling errors.
+      }
+    }, 1500);
+
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+    };
+  }, [classId, hasProcessing]);
 
   const handleDelete = async (id: string) => {
     if (pendingId) return;
@@ -87,9 +121,22 @@ export default function ClassDocumentList({
     );
   }
 
+  if (hasProcessing) {
+    return (
+      <div className="rounded-2xl bg-[color:var(--app-surface)] p-6 text-sm text-[color:var(--app-subtle)] ring-1 ring-[color:var(--app-border)]">
+        <div className="text-[color:var(--app-text)] font-medium">Preparing documents...</div>
+        <div className="mt-2 text-xs text-[color:var(--app-muted)]">
+          Keeping this screen in loading state until all documents are ready.
+        </div>
+      </div>
+    );
+  }
+
+  const readyItems = orderedItems.filter((doc) => doc.status === "done");
+
   return (
     <div className="grid gap-3">
-      {orderedItems.map((doc) => {
+      {readyItems.map((doc) => {
         const created = formatDate(doc.createdAt);
         const processed = formatDate(doc.processedAt);
         return (
@@ -109,7 +156,7 @@ export default function ClassDocumentList({
               </div>
               <div className="flex items-center gap-2">
                 <div className="text-xs text-[color:var(--app-subtle)]">
-                  {formatStatus(doc.status)}
+                  Ready
                 </div>
                 <button
                   type="button"
@@ -124,6 +171,18 @@ export default function ClassDocumentList({
           </div>
         );
       })}
+
+      {hasFailed ? (
+        <div className="rounded-2xl bg-red-500/10 p-3 text-xs text-red-300 ring-1 ring-red-500/20">
+          One or more documents failed to process. Re-upload those files to continue.
+        </div>
+      ) : null}
+
+      {readyItems.length === 0 && !hasFailed ? (
+        <div className="rounded-2xl bg-[color:var(--app-surface)] p-6 text-sm text-[color:var(--app-subtle)] ring-1 ring-[color:var(--app-border)]">
+          No ready documents yet.
+        </div>
+      ) : null}
 
       {confirmId ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4 backdrop-blur-sm">

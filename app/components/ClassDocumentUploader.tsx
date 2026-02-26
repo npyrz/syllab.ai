@@ -36,17 +36,6 @@ function inferDocTypeFromFilename(file: File): "syllabus" | "schedule" | "other"
   return "other";
 }
 
-function formatExtractionStatus(status?: string) {
-  if (!status) return "Waiting for extraction";
-
-  if (status === "pending") return "Queued for extraction";
-  if (status === "processing") return "Extracting text";
-  if (status === "done") return "Extraction complete";
-  if (status === "failed") return "Extraction failed";
-
-  return status;
-}
-
 export default function ClassDocumentUploader({ classId }: { classId: string }) {
   const router = useRouter();
   const [files, setFiles] = useState<File[]>([]);
@@ -279,7 +268,7 @@ export default function ClassDocumentUploader({ classId }: { classId: string }) 
     phase === "uploading"
       ? `Uploading files (${uploadProgress}%)`
       : phase === "extracting"
-      ? `Extracting document text (${extractionProgress.done}/${extractionProgress.total})`
+      ? `Preparing documents (${extractionProgress.done}/${extractionProgress.total})`
       : phase === "refreshing"
       ? "Finalizing and refreshing"
       : null;
@@ -365,7 +354,7 @@ export default function ClassDocumentUploader({ classId }: { classId: string }) 
           {phase === "uploading"
             ? "Uploading..."
             : phase === "extracting"
-            ? "Extracting..."
+            ? "Preparing..."
             : phase === "refreshing"
             ? "Refreshing..."
             : "Upload Documents"}
@@ -412,11 +401,6 @@ export default function ClassDocumentUploader({ classId }: { classId: string }) 
               <li key={result.key}>
                 {result.ok ? "Uploaded" : "Failed"}: {result.name}
                 {result.error ? ` (${result.error})` : ""}
-                {result.ok
-                  ? ` • ${formatExtractionStatus(
-                      result.documentId ? documentStatuses[result.documentId] ?? result.status : result.status
-                    )}`
-                  : ""}
               </li>
             ))}
           </ul>
