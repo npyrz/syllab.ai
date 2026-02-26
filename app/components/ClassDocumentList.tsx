@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 
 type DocumentItem = {
@@ -19,10 +19,8 @@ function formatDate(value: string | Date | null) {
 }
 
 export default function ClassDocumentList({
-  classId,
   documents,
 }: {
-  classId: string;
   documents: DocumentItem[];
 }) {
   const router = useRouter();
@@ -44,47 +42,6 @@ export default function ClassDocumentList({
       }),
     [items]
   );
-
-  useEffect(() => {
-    setItems(documents);
-  }, [documents]);
-
-  useEffect(() => {
-    if (!hasProcessing) return;
-
-    let isMounted = true;
-    const interval = setInterval(async () => {
-      try {
-        const response = await fetch(`/api/documents?classId=${encodeURIComponent(classId)}`, {
-          method: "GET",
-          cache: "no-store",
-        });
-
-        if (!response.ok) return;
-        const payload = await response.json();
-        const docs = Array.isArray(payload?.documents) ? payload.documents : [];
-
-        const mapped: DocumentItem[] = docs.map((doc: Record<string, unknown>) => ({
-          id: String(doc.id ?? ""),
-          filename: String(doc.filename ?? "Untitled"),
-          status: String(doc.status ?? "pending"),
-          createdAt: String(doc.createdAt ?? new Date().toISOString()),
-          processedAt: (doc.processedAt as string | null) ?? null,
-        }));
-
-        if (isMounted) {
-          setItems(mapped);
-        }
-      } catch {
-        // Ignore transient polling errors.
-      }
-    }, 1500);
-
-    return () => {
-      isMounted = false;
-      clearInterval(interval);
-    };
-  }, [classId, hasProcessing]);
 
   const handleDelete = async (id: string) => {
     if (pendingId) return;
@@ -117,17 +74,6 @@ export default function ClassDocumentList({
     return (
       <div className="rounded-2xl bg-[color:var(--app-surface)] p-6 text-sm text-[color:var(--app-subtle)] ring-1 ring-[color:var(--app-border)]">
         No Documents Uploaded Yet.
-      </div>
-    );
-  }
-
-  if (hasProcessing) {
-    return (
-      <div className="rounded-2xl bg-[color:var(--app-surface)] p-6 text-sm text-[color:var(--app-subtle)] ring-1 ring-[color:var(--app-border)]">
-        <div className="text-[color:var(--app-text)] font-medium">Preparing documents...</div>
-        <div className="mt-2 text-xs text-[color:var(--app-muted)]">
-          Keeping this screen in loading state until all documents are ready.
-        </div>
       </div>
     );
   }
@@ -178,7 +124,7 @@ export default function ClassDocumentList({
         </div>
       ) : null}
 
-      {readyItems.length === 0 && !hasFailed ? (
+      {readyItems.length === 0 && !hasFailed && !hasProcessing ? (
         <div className="rounded-2xl bg-[color:var(--app-surface)] p-6 text-sm text-[color:var(--app-subtle)] ring-1 ring-[color:var(--app-border)]">
           No ready documents yet.
         </div>
