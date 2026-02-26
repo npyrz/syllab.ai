@@ -1,16 +1,21 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/auth';
 import { prisma } from '@/lib/prisma';
-import { streamText } from 'ai';
-import { groq } from '@ai-sdk/groq';
+import Groq from 'groq-sdk';
 
-const CHAT_MODEL =
-  (process.env.GROQ_CHAT_MODEL ?? 'llama-3.3-70b-versatile') as Parameters<typeof groq>[0];
+const CHAT_MODEL = process.env.GROQ_CHAT_MODEL?.trim() || 'llama-3.3-70b-versatile';
+const CHAT_TEMPERATURE = Number.parseFloat(process.env.GROQ_CHAT_TEMPERATURE ?? '0.7');
+const CHAT_REASONING_EFFORT =
+  (process.env.GROQ_CHAT_REASONING_EFFORT?.trim() || 'medium') as 'none' | 'low' | 'medium' | 'high';
+const groqClient = new Groq({ apiKey: process.env.GROQ_API_KEY });
+const CHAT_META_PREFIX = '\n<<__CHAT_META__';
+const CHAT_META_SUFFIX = '__>>';
 
 const USER_DAILY_REQUEST_LIMIT = 1000;
 const USER_DAILY_TOKEN_LIMIT = 200_000;
 const GLOBAL_DAILY_REQUEST_LIMIT = 1000;
 const GLOBAL_DAILY_TOKEN_LIMIT = 200_000;
+const IS_DEV = process.env.NODE_ENV === 'development';
 
 const SOURCE_STOP_WORDS = new Set([
   'the', 'and', 'that', 'with', 'this', 'from', 'your', 'you', 'for', 'are', 'was', 'were',
@@ -81,6 +86,45 @@ function getDayStartForTimeZone(date: Date, timeZone: string) {
   } catch {
     return getUtcDayStart(date);
   }
+}
+
+function quotaResponse(params: {
+  message: string;
+  code:
+    | 'USER_DAILY_REQUEST_LIMIT'
+    | 'USER_DAILY_TOKEN_LIMIT'
+    | 'GLOBAL_DAILY_REQUEST_LIMIT'
+    | 'GLOBAL_DAILY_TOKEN_LIMIT';
+  retryAt: Date;
+}) {
+  const now = Date.now();
+  const retryAtMs = params.retryAt.getTime();
+  const retryAfterSeconds = Math.max(1, Math.ceil((retryAtMs - now) / 1000));
+
+  return NextResponse.json(
+    {
+      error: params.message,
+      code: params.code,
+      retryAt: params.retryAt.toISOString(),
+      retryAfterSeconds,
+    },
+    {
+      status: 429,
+      headers: {
+        'Retry-After': String(retryAfterSeconds),
+      },
+    }
+  );
+}
+
+function clampTemperature(value: number, fallback: number) {
+  if (!Number.isFinite(value)) return fallback;
+  return Math.min(2, Math.max(0, value));
+}
+
+function supportsReasoningEffort(modelName: string) {
+  const normalized = modelName.toLowerCase();
+  return normalized.includes('gpt-oss') || normalized.includes('qwen3') || normalized.includes('deepseek-r1');
 }
 
 /**
@@ -176,6 +220,8 @@ ${context}
     const userTimeZone = userRecord?.timezone ?? 'UTC';
     const userDayStart = getDayStartForTimeZone(now, userTimeZone);
     const globalDayStart = getUtcDayStart(now);
+    const userRetryAt = new Date(userDayStart.getTime() + 24 * 60 * 60 * 1000);
+    const globalRetryAt = new Date(globalDayStart.getTime() + 24 * 60 * 60 * 1000);
 
     const [userUsage, globalUsage] = await Promise.all([
       prisma.apiUsageDaily.upsert({
@@ -198,44 +244,57 @@ ${context}
       }),
     ]);
 
-    if (userUsage.requestCount >= USER_DAILY_REQUEST_LIMIT) {
-      return NextResponse.json(
-        { error: 'Daily request limit reached. Try again tomorrow.' },
-        { status: 429 }
-      );
+    if (!IS_DEV) {
+      if (userUsage.requestCount >= USER_DAILY_REQUEST_LIMIT) {
+        return quotaResponse({
+          message: 'Daily request limit reached. Try again tomorrow.',
+          code: 'USER_DAILY_REQUEST_LIMIT',
+          retryAt: userRetryAt,
+        });
+      }
+
+      if (userUsage.tokenCount >= USER_DAILY_TOKEN_LIMIT) {
+        return quotaResponse({
+          message: 'Daily token limit reached. Try again tomorrow.',
+          code: 'USER_DAILY_TOKEN_LIMIT',
+          retryAt: userRetryAt,
+        });
+      }
+
+      if (globalUsage.requestCount >= GLOBAL_DAILY_REQUEST_LIMIT) {
+        return quotaResponse({
+          message: 'Global request limit reached. Try again tomorrow.',
+          code: 'GLOBAL_DAILY_REQUEST_LIMIT',
+          retryAt: globalRetryAt,
+        });
+      }
+
+      if (globalUsage.tokenCount >= GLOBAL_DAILY_TOKEN_LIMIT) {
+        return quotaResponse({
+          message: 'Global token limit reached. Try again tomorrow.',
+          code: 'GLOBAL_DAILY_TOKEN_LIMIT',
+          retryAt: globalRetryAt,
+        });
+      }
     }
 
-    if (userUsage.tokenCount >= USER_DAILY_TOKEN_LIMIT) {
-      return NextResponse.json(
-        { error: 'Daily token limit reached. Try again tomorrow.' },
-        { status: 429 }
-      );
-    }
-
-    if (globalUsage.requestCount >= GLOBAL_DAILY_REQUEST_LIMIT) {
-      return NextResponse.json(
-        { error: 'Global request limit reached. Try again tomorrow.' },
-        { status: 429 }
-      );
-    }
-
-    if (globalUsage.tokenCount >= GLOBAL_DAILY_TOKEN_LIMIT) {
-      return NextResponse.json(
-        { error: 'Global token limit reached. Try again tomorrow.' },
-        { status: 429 }
-      );
-    }
-
-    const result = await streamText({
-      model: groq(CHAT_MODEL),
-      system: systemPrompt,
-      prompt: message,
-      temperature: 0.5,
-      maxOutputTokens: 2048,
+    const completion = await groqClient.chat.completions.create({
+      model: CHAT_MODEL,
+      temperature: clampTemperature(CHAT_TEMPERATURE, 0.7),
+      max_completion_tokens: 2048,
+      ...(supportsReasoningEffort(CHAT_MODEL)
+        ? { reasoning_effort: CHAT_REASONING_EFFORT }
+        : {}),
+      stream: true,
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: message },
+      ],
     });
 
     const encoder = new TextEncoder();
     let fullResponse = '';
+    let totalTokens = 0;
 
     let isClosed = false;
     let isCancelled = false;
@@ -275,16 +334,23 @@ ${context}
         req.signal.addEventListener('abort', onAbort);
 
         try {
-          for await (const chunk of result.textStream) {
+          for await (const chunk of completion) {
             if (isCancelled) return;
-            fullResponse += chunk;
-            if (!safeEnqueue(`event: token\ndata: ${JSON.stringify({ token: chunk })}\n\n`)) {
+
+            const token = chunk.choices?.[0]?.delta?.content ?? '';
+            if (!token) continue;
+
+            fullResponse += token;
+            if (!safeEnqueue(token)) {
               return;
             }
           }
 
-          const usage = await result.usage;
-          const totalTokens = usage?.totalTokens ?? 0;
+          if (totalTokens <= 0) {
+            const estimatedPromptTokens = Math.ceil(message.length / 4);
+            const estimatedCompletionTokens = Math.ceil(fullResponse.length / 4);
+            totalTokens = estimatedPromptTokens + estimatedCompletionTokens;
+          }
 
           await Promise.all([
             prisma.apiUsageDaily.update({
@@ -315,23 +381,12 @@ ${context}
             documents,
           });
 
-          safeEnqueue(
-            `event: done\ndata: ${JSON.stringify({
-              response: fullResponse,
-              sources,
-              documentsUsed: sources.length,
-            })}\n\n`
-          );
+          const metaPayload = JSON.stringify({ sources });
+          safeEnqueue(`${CHAT_META_PREFIX}${metaPayload}${CHAT_META_SUFFIX}`);
+
           safeClose();
         } catch (streamError) {
           console.error('[Chat] Streaming error:', streamError);
-          if (!isCancelled) {
-            safeEnqueue(
-              `event: error\ndata: ${JSON.stringify({
-                error: 'Failed to stream chat response',
-              })}\n\n`
-            );
-          }
           safeClose();
         } finally {
           req.signal.removeEventListener('abort', onAbort);
@@ -346,7 +401,7 @@ ${context}
 
     return new Response(stream, {
       headers: {
-        'Content-Type': 'text/event-stream; charset=utf-8',
+        'Content-Type': 'text/plain; charset=utf-8',
         'Cache-Control': 'no-cache, no-transform',
         Connection: 'keep-alive',
         'X-Accel-Buffering': 'no',

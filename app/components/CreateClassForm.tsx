@@ -7,6 +7,53 @@ type FileBucket = {
   files: File[];
 };
 
+type CreateFlowStage =
+  | "idle"
+  | "creating-class"
+  | "uploading-documents"
+  | "preparing-week-selection"
+  | "saving-week"
+  | "redirecting";
+
+function getCreateFlowMessage(stage: CreateFlowStage) {
+  if (stage === "creating-class") {
+    return {
+      title: "Creating your class",
+      detail: "Setting up the class workspace.",
+    };
+  }
+
+  if (stage === "uploading-documents") {
+    return {
+      title: "Uploading and processing documents",
+      detail: "This can take a moment depending on file size.",
+    };
+  }
+
+  if (stage === "preparing-week-selection") {
+    return {
+      title: "Preparing week setup",
+      detail: "Getting your class ready for week confirmation.",
+    };
+  }
+
+  if (stage === "saving-week") {
+    return {
+      title: "Saving current week",
+      detail: "Applying your week selection.",
+    };
+  }
+
+  if (stage === "redirecting") {
+    return {
+      title: "Almost done",
+      detail: "Taking you to your home dashboard.",
+    };
+  }
+
+  return null;
+}
+
 function formatFileCount(files: File[]) {
   if (files.length === 0) return "No files selected";
   if (files.length === 1) return files[0].name;
@@ -113,16 +160,19 @@ export default function CreateClassForm() {
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [flowStage, setFlowStage] = useState<CreateFlowStage>("idle");
   
   const [showVerifier, setShowVerifier] = useState(false);
   const [classId, setClassId] = useState<string | null>(null);
 
   const canSubmit = className.trim().length > 0 && !isSubmitting;
+  const loadingState = getCreateFlowMessage(flowStage);
 
   const handleVerifySemester = async (currentWeek: number) => {
     if (!classId) return;
     
     try {
+      setFlowStage("saving-week");
       const response = await fetch("/api/classes", {
         method: "PATCH",
         headers: { "content-type": "application/json" },
@@ -138,10 +188,12 @@ export default function CreateClassForm() {
       }
 
       setShowVerifier(false);
+      setFlowStage("redirecting");
       window.location.assign("/home");
     } catch (err) {
       console.error("Error verifying week:", err);
       setError(err instanceof Error ? err.message : "Failed to save week info");
+      setFlowStage("idle");
     }
   };
 
@@ -156,6 +208,8 @@ export default function CreateClassForm() {
         setError(null);
 
         try {
+          setFlowStage("creating-class");
+
           // Step 1: Create the class
           const classResponse = await fetch("/api/classes", {
             method: "POST",
@@ -174,6 +228,7 @@ export default function CreateClassForm() {
           const classId = newClass.id;
 
           // Step 2: Upload all files
+          setFlowStage("uploading-documents");
           const allFiles = [
             ...syllabus.files.map((file) => ({ file, docType: "syllabus" as const })),
             ...schedule.files.map((file) => ({ file, docType: "schedule" as const })),
@@ -214,17 +269,22 @@ export default function CreateClassForm() {
 
           // Step 3: If schedule documents were uploaded, show verifier
           if (hasDetectedSchedule) {
+            setFlowStage("preparing-week-selection");
             setClassId(classId);
+            await new Promise((resolve) => setTimeout(resolve, 350));
             setShowVerifier(true);
+            setFlowStage("idle");
             setIsSubmitting(false);
           } else {
             // No schedule doc - redirect immediately
+            setFlowStage("redirecting");
             window.location.assign("/home");
           }
         } catch (err) {
           console.error("Error creating class:", err);
           setError(err instanceof Error ? err.message : "Failed to create class");
           setIsSubmitting(false);
+          setFlowStage("idle");
         }
       }}
     >
@@ -293,10 +353,25 @@ export default function CreateClassForm() {
       {classId && (
         <SemesterWeekVerifier
           isOpen={showVerifier}
-          onClose={() => setShowVerifier(false)}
           onVerify={handleVerifySemester}
         />
       )}
+
+      {loadingState ? (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 px-4 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-3xl bg-[color:var(--app-surface)] p-6 text-sm text-[color:var(--app-text)] ring-1 ring-[color:var(--app-border)] shadow-[0_24px_70px_rgba(0,0,0,0.45)]">
+            <div className="text-base font-semibold text-[color:var(--app-text)]">
+              {loadingState.title}
+            </div>
+            <div className="mt-2 text-xs text-[color:var(--app-subtle)]">
+              {loadingState.detail}
+            </div>
+            <div className="mt-4 h-1.5 w-full overflow-hidden rounded-full bg-[color:var(--app-border)]">
+              <div className="h-full w-2/5 animate-pulse rounded-full bg-gradient-to-r from-cyan-300 to-indigo-300" />
+            </div>
+          </div>
+        </div>
+      ) : null}
     </form>
   );
 }

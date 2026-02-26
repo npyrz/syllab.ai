@@ -1,7 +1,21 @@
-import { generateText } from "ai";
-import { groq } from "@ai-sdk/groq";
+import Groq from "groq-sdk";
 import { unstable_cache } from "next/cache";
 import { createHash } from "node:crypto";
+
+const groqClient = new Groq({ apiKey: process.env.GROQ_API_KEY });
+const SCHEDULE_TEMPERATURE = Number.parseFloat(process.env.GROQ_SCHEDULE_TEMPERATURE ?? "0.15");
+const SCHEDULE_REASONING_EFFORT =
+  (process.env.GROQ_SCHEDULE_REASONING_EFFORT?.trim() || "low") as "none" | "low" | "medium" | "high";
+
+function clampTemperature(value: number, fallback: number) {
+  if (!Number.isFinite(value)) return fallback;
+  return Math.min(2, Math.max(0, value));
+}
+
+function supportsReasoningEffort(modelName: string) {
+  const normalized = modelName.toLowerCase();
+  return normalized.includes("gpt-oss") || normalized.includes("qwen3") || normalized.includes("deepseek-r1");
+}
 
 export type ScheduleEntry = {
   date: string; // ISO 8601 format: YYYY-MM-DD
@@ -319,26 +333,36 @@ async function runGroqExtractionAttempt(params: {
   currentWeek: number;
   prompt: string;
 }) {
-  const result = await generateText({
-    model: groq(params.modelName),
-    temperature: 0,
-    maxOutputTokens: 900,
-    system:
-      "You are a precise schedule extractor. Return ONLY a valid JSON value that matches the requested schema with no markdown or commentary.",
-    prompt: params.prompt,
+  const completion = await groqClient.chat.completions.create({
+    model: params.modelName,
+    temperature: clampTemperature(SCHEDULE_TEMPERATURE, 0.15),
+    max_completion_tokens: 900,
+    ...(supportsReasoningEffort(params.modelName)
+      ? { reasoning_effort: SCHEDULE_REASONING_EFFORT }
+      : {}),
+    messages: [
+      {
+        role: "system",
+        content:
+          "You are a precise schedule extractor. Return ONLY a valid JSON value that matches the requested schema with no markdown or commentary.",
+      },
+      { role: "user", content: params.prompt },
+    ],
   });
 
-  const parsed = parseStructuredScheduleFromModelText(result.text);
+  const modelText = completion.choices[0]?.message?.content ?? "";
+
+  const parsed = parseStructuredScheduleFromModelText(modelText);
   const usable = parsed.length > 0 && !isLowSignalSchedule(parsed);
 
   console.log("[WeeklyScheduleAI] model attempt result", {
     classId: params.classId,
     week: params.currentWeek,
     model: params.modelName,
-    responseLength: result.text.length,
+    responseLength: modelText.length,
     parsedCount: parsed.length,
     usable,
-    responsePreview: result.text.slice(0, 300),
+    responsePreview: modelText.slice(0, 300),
   });
 
   return { parsed, usable };

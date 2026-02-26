@@ -3,6 +3,7 @@ import { auth } from '@/auth';
 import { prisma } from '@/lib/prisma';
 import { put } from '@vercel/blob';
 import { processDocument } from '@/lib/document-processor';
+import type { Prisma } from '@prisma/client';
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
 const ALLOWED_TYPES = [
   'application/pdf',
@@ -44,7 +45,7 @@ export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const classId = searchParams.get('classId');
 
-  const whereClause: any = { userId: session.user.id };
+  const whereClause: Prisma.DocumentWhereInput = { userId: session.user.id };
   if (classId) {
     whereClause.classId = classId;
   }
@@ -163,13 +164,10 @@ export async function POST(req: NextRequest) {
 
     console.log(`[Upload] Created document record: ${document.id}`);
 
-    // Process document in "background" (for now, synchronously)
-    // In production, you'd use a queue like BullMQ or trigger a serverless function
-    try {
-      await processDocument(document.id);
-    } catch (error) {
-      console.error('[Upload] Processing failed, but document was saved:', error);
-    }
+    // Start extraction asynchronously so clients can show a distinct extraction phase
+    void processDocument(document.id).catch((processingError) => {
+      console.error('[Upload] Processing failed, but document was saved:', processingError);
+    });
 
     // Fetch updated document
     const updatedDocument = await prisma.document.findUnique({
