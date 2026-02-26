@@ -3,6 +3,23 @@ import { extractText } from '@/lib/text-extraction';
 import { del } from '@vercel/blob';
 import { primeCurrentWeekScheduleForClass } from '@/lib/weekly-schedule-sync';
 
+const BLOB_FETCH_TIMEOUT_MS = 30_000;
+const TEXT_EXTRACTION_TIMEOUT_MS = 60_000;
+
+function withTimeout<T>(promise: Promise<T>, timeoutMs: number, label: string): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => {
+      reject(new Error(`${label} timed out after ${timeoutMs}ms`));
+    }, timeoutMs);
+  });
+
+  return Promise.race([promise, timeoutPromise]).finally(() => {
+    if (timer) clearTimeout(timer);
+  });
+}
+
 /**
  * Extract weekly schedule from document text
  * Identifies days of week and associated events
@@ -112,13 +129,19 @@ export async function processDocument(documentId: string): Promise<void> {
     }
 
     // Extract text from the blob
-    const response = await fetch(document.storageKey);
+    const response = await fetch(document.storageKey, {
+      signal: AbortSignal.timeout(BLOB_FETCH_TIMEOUT_MS),
+    });
     if (!response.ok) {
       throw new Error(`Failed to download blob: ${response.status}`);
     }
     const arrayBuffer = await response.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
-    const extractedText = await extractText(buffer, document.mimeType);
+    const extractedText = await withTimeout(
+      extractText(buffer, document.mimeType),
+      TEXT_EXTRACTION_TIMEOUT_MS,
+      'Text extraction'
+    );
 
     console.log(
       `[Worker] Extracted ${extractedText.length} characters from ${document.filename}`
