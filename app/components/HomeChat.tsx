@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
@@ -20,6 +20,36 @@ type Message = {
   content: string;
   sources?: string[];
 };
+
+const CHAT_META_PREFIX = "\n<<__CHAT_META__";
+const CHAT_META_SUFFIX = "__>>";
+
+function extractChatMeta(rawContent: string): { content: string; sources: string[] } {
+  const metaStart = rawContent.lastIndexOf(CHAT_META_PREFIX);
+  if (metaStart === -1) {
+    return { content: rawContent, sources: [] };
+  }
+
+  const jsonStart = metaStart + CHAT_META_PREFIX.length;
+  const metaEnd = rawContent.indexOf(CHAT_META_SUFFIX, jsonStart);
+  if (metaEnd === -1) {
+    return { content: rawContent, sources: [] };
+  }
+
+  const jsonPayload = rawContent.slice(jsonStart, metaEnd);
+  const visibleContent = `${rawContent.slice(0, metaStart)}${rawContent.slice(metaEnd + CHAT_META_SUFFIX.length)}`;
+
+  try {
+    const parsed = JSON.parse(jsonPayload) as { sources?: unknown };
+    const sources = Array.isArray(parsed.sources)
+      ? parsed.sources.filter((value): value is string => typeof value === "string")
+      : [];
+
+    return { content: visibleContent, sources };
+  } catch {
+    return { content: rawContent, sources: [] };
+  }
+}
 
 function formatLimitMessage(error: {
   error?: string;
@@ -53,8 +83,6 @@ export default function HomeChat({ classes }: { classes: ClassOption[] }) {
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [streamingMessageId, setStreamingMessageId] = useState<string | null>(null);
-  const streamBufferRef = useRef("");
-  const streamTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const selectedClass = classes.find((course) => course.id === selectedClassId);
 
@@ -102,8 +130,7 @@ export default function HomeChat({ classes }: { classes: ClassOption[] }) {
         return;
       }
 
-      const contentType = response.headers.get("content-type") ?? "";
-      if (!contentType.includes("text/event-stream") || !response.body) {
+      if (!response.body) {
         const data = await response.json();
         setMessages((prev) =>
           prev.map((msg) =>
@@ -117,112 +144,40 @@ export default function HomeChat({ classes }: { classes: ClassOption[] }) {
 
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
-      let buffered = "";
-
-      const flushBufferedTokens = () => {
-        const bufferedTokens = streamBufferRef.current;
-        if (!bufferedTokens) return;
-        streamBufferRef.current = "";
-
-        setMessages((prev) =>
-          prev.map((msg) =>
-            msg.id === assistantId
-              ? { ...msg, content: `${msg.content}${bufferedTokens}` }
-              : msg
-          )
-        );
-      };
-
-      const ensureFlushTimer = () => {
-        if (streamTimerRef.current) return;
-        streamTimerRef.current = setInterval(flushBufferedTokens, 160);
-      };
-
-      const stopFlushTimer = () => {
-        if (!streamTimerRef.current) return;
-        clearInterval(streamTimerRef.current);
-        streamTimerRef.current = null;
-      };
-
-      const flushEvent = (rawEvent: string) => {
-        const lines = rawEvent.split("\n");
-        let eventName = "message";
-        const dataLines: string[] = [];
-
-        for (const line of lines) {
-          if (line.startsWith("event:")) {
-            eventName = line.slice(6).trim();
-          } else if (line.startsWith("data:")) {
-            dataLines.push(line.slice(5).trim());
-          }
-        }
-
-        if (dataLines.length === 0) return;
-        const payload = JSON.parse(dataLines.join("\n"));
-
-        if (eventName === "token") {
-          streamBufferRef.current += payload.token;
-          ensureFlushTimer();
-          return;
-        }
-
-        if (eventName === "done") {
-          stopFlushTimer();
-          flushBufferedTokens();
-          setMessages((prev) =>
-            prev.map((msg) =>
-              msg.id === assistantId
-                ? {
-                    ...msg,
-                    content: payload.response ?? msg.content,
-                    sources: payload.sources ?? [],
-                  }
-                : msg
-            )
-          );
-          setStreamingMessageId(null);
-          return;
-        }
-
-        if (eventName === "error") {
-          stopFlushTimer();
-          flushBufferedTokens();
-          setMessages((prev) =>
-            prev.map((msg) =>
-              msg.id === assistantId
-                ? {
-                    ...msg,
-                    content: `Error: ${payload.error ?? "Stream failed"}`,
-                  }
-                : msg
-            )
-          );
-          setStreamingMessageId(null);
-        }
-      };
+      let accumulated = "";
 
       while (true) {
         const { value, done } = await reader.read();
         if (done) break;
 
-        buffered += decoder.decode(value, { stream: true });
-        const parts = buffered.split("\n\n");
-        buffered = parts.pop() ?? "";
+        const tokenChunk = decoder.decode(value, { stream: true });
+        if (!tokenChunk) continue;
 
-        for (const part of parts) {
-          if (part.trim()) flushEvent(part);
-        }
+        accumulated += tokenChunk;
+        setMessages((prev) =>
+          prev.map((msg) =>
+            msg.id === assistantId
+              ? { ...msg, content: accumulated }
+              : msg
+          )
+        );
       }
 
-      stopFlushTimer();
-      flushBufferedTokens();
+      const remaining = decoder.decode();
+      if (remaining) {
+        accumulated += remaining;
+      }
+
+      const parsed = extractChatMeta(accumulated);
+      setMessages((prev) =>
+        prev.map((msg) =>
+          msg.id === assistantId
+            ? { ...msg, content: parsed.content, sources: parsed.sources }
+            : msg
+        )
+      );
     } catch (error) {
       console.error("Chat error:", error);
-      if (streamTimerRef.current) {
-        clearInterval(streamTimerRef.current);
-        streamTimerRef.current = null;
-      }
-      streamBufferRef.current = "";
       setMessages((prev) =>
         prev.map((msg) =>
           msg.id === assistantId

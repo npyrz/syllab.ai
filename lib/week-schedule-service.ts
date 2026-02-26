@@ -1,5 +1,4 @@
-import { generateText } from "ai";
-import { groq } from "@ai-sdk/groq";
+import Groq from "groq-sdk";
 import { createHash } from "node:crypto";
 import { prisma } from "@/lib/prisma";
 import { Prisma } from "@prisma/client";
@@ -11,8 +10,22 @@ import {
 } from "@/lib/week-utils";
 
 const DOWS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"] as const;
+const groqClient = new Groq({ apiKey: process.env.GROQ_API_KEY });
+const SCHEDULE_TEMPERATURE = Number.parseFloat(process.env.GROQ_SCHEDULE_TEMPERATURE ?? "0.15");
+const SCHEDULE_REASONING_EFFORT =
+  (process.env.GROQ_SCHEDULE_REASONING_EFFORT?.trim() || "low") as "none" | "low" | "medium" | "high";
 
 type Dow = (typeof DOWS)[number];
+
+function clampTemperature(value: number, fallback: number) {
+  if (!Number.isFinite(value)) return fallback;
+  return Math.min(2, Math.max(0, value));
+}
+
+function supportsReasoningEffort(modelName: string) {
+  const normalized = modelName.toLowerCase();
+  return normalized.includes("gpt-oss") || normalized.includes("qwen3") || normalized.includes("deepseek-r1");
+}
 
 export type WeekRawRow = {
   dateISO: string;
@@ -440,29 +453,33 @@ ${params.syllabusHints || "(none)"}
 
 Return JSON only.`;
 
-  const modelResult = await generateText({
-    model: groq(params.modelName),
-    temperature: 0,
-    maxOutputTokens: 900,
-    maxRetries: 0,
-    providerOptions: {
-      groq: {
-        response_format: { type: "json_object" },
+  const completion = await groqClient.chat.completions.create({
+    model: params.modelName,
+    temperature: clampTemperature(SCHEDULE_TEMPERATURE, 0.15),
+    max_completion_tokens: 900,
+    ...(supportsReasoningEffort(params.modelName)
+      ? { reasoning_effort: SCHEDULE_REASONING_EFFORT }
+      : {}),
+    response_format: { type: "json_object" },
+    messages: [
+      {
+        role: "system",
+        content:
+          "You are a schedule planner that converts structured weekly rows into dashboard-ready cards. You MUST return valid JSON only with no markdown or commentary. NEVER return an empty string.",
       },
-    },
-    system:
-      "You are a schedule planner that converts structured weekly rows into dashboard-ready cards. You MUST return valid JSON only with no markdown or commentary. NEVER return an empty string.",
-    prompt,
+      { role: "user", content: prompt },
+    ],
   });
 
-  const parsed = parseJsonObject(modelResult.text);
+  const modelText = completion.choices[0]?.message?.content ?? "";
+  const parsed = parseJsonObject(modelText);
 
   if (!parsed) {
     console.warn("[WeekSchedule] Groq returned invalid or empty JSON payload; using structured weekRows normalization.", {
       model: params.modelName,
       week: params.currentWeek,
-      responseLength: modelResult.text.length,
-      responsePreview: modelResult.text.slice(0, 300),
+      responseLength: modelText.length,
+      responsePreview: modelText.slice(0, 300),
     });
   }
 
