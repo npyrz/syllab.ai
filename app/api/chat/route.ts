@@ -103,12 +103,14 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    const userId = session.user.id as string;
+
     // Verify class ownership
     const classRecord = await prisma.class.findUnique({
       where: { id: classId },
     });
 
-    if (!classRecord || classRecord.userId !== session.user.id) {
+    if (!classRecord || classRecord.userId !== userId) {
       return NextResponse.json(
         { error: 'Class not found or unauthorized' },
         { status: 403 }
@@ -119,7 +121,7 @@ export async function POST(req: NextRequest) {
     const documents = await prisma.document.findMany({
       where: {
         classId: classId,
-        userId: session.user.id,
+        userId: userId,
         status: 'done',
         textExtracted: { not: null },
       },
@@ -156,36 +158,35 @@ ${context}
 - Be conversational, warm, and helpful — like a smart classmate explaining things.
 - Use clean **Markdown** formatting: headings (##), **bold** for key terms, bullet lists, and numbered steps where they help.
 - Keep answers concise but complete. Avoid walls of text.
-              const userId = session.user.id as string;
 - Paraphrase and synthesize — do NOT copy-paste from the documents.
 - Use concrete examples and plain language. Avoid unnecessary jargon.
 - If the answer isn't in the documents, say so honestly.
 - Do NOT include source citations or document references in your response — those are handled separately by the app.
 - Never output XML tags, raw document text, or reasoning scaffolding. Just give a clean, readable answer.`;
 
-              if (!classRecord || classRecord.userId !== userId) {
+    console.log(`[Chat] Processing query for class ${classId}: "${message}"`);
     console.log(`[Chat] Using context from ${documents.length} document(s)`);
 
     const userRecord = await prisma.user.findUnique({
-      where: { id: session.user.id },
+      where: { id: userId },
       select: { timezone: true },
     });
 
     const now = new Date();
     const userTimeZone = userRecord?.timezone ?? 'UTC';
     const userDayStart = getDayStartForTimeZone(now, userTimeZone);
-                  userId: userId,
+    const globalDayStart = getUtcDayStart(now);
 
     const [userUsage, globalUsage] = await Promise.all([
       prisma.apiUsageDaily.upsert({
         where: {
           userId_windowStart: {
-            userId: session.user.id,
+            userId: userId,
             windowStart: userDayStart,
           },
         },
         create: {
-          userId: session.user.id,
+          userId: userId,
           windowStart: userDayStart,
         },
         update: {},
@@ -208,6 +209,14 @@ ${context}
       return NextResponse.json(
         { error: 'Daily token limit reached. Try again tomorrow.' },
         { status: 429 }
+      );
+    }
+
+    if (globalUsage.requestCount >= GLOBAL_DAILY_REQUEST_LIMIT) {
+      return NextResponse.json(
+        { error: 'Global request limit reached. Try again tomorrow.' },
+        { status: 429 }
+      );
     }
 
     if (globalUsage.tokenCount >= GLOBAL_DAILY_TOKEN_LIMIT) {
@@ -281,7 +290,7 @@ ${context}
             prisma.apiUsageDaily.update({
               where: {
                 userId_windowStart: {
-                  userId: session.user.id,
+                  userId: userId,
                   windowStart: userDayStart,
                 },
               },
