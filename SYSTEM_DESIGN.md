@@ -36,7 +36,7 @@ The platform is user-scoped by design: data retrieval and AI context constructio
 
 ### External Services
 
-- Groq (AI inference via AI SDK)
+- Groq (AI inference via native `groq-sdk`)
 - Vercel Blob (temporary uploaded file storage before extraction)
 
 ## 4) Current UI/UX Surface
@@ -127,10 +127,11 @@ Implemented with NextAuth v5 beta:
   - Requires auth + class ownership
   - Loads class-scoped processed document text
   - Builds system prompt with document context
-  - Calls Groq model via AI SDK
+  - Calls Groq model via native `groq-sdk` streaming API
+  - Streams plain-text chunks to client
+  - Appends end-of-stream metadata marker for source attribution
   - Applies request/token quota checks (user daily + global daily)
-  - Stores usage increments after response
-  - Returns response + ranked source filenames
+  - Stores usage increments after response (with token estimation fallback)
 
 ### Schedule Refresh (Cron)
 
@@ -146,6 +147,8 @@ Implemented with NextAuth v5 beta:
 4. Downloads blob, extracts text:
    - PDF -> `pdfjs-dist`
    - DOC/DOCX -> `mammoth`
+  - Guarded by fetch and extraction timeouts
+  - PDF extraction tolerates unreadable pages and stops invalid tail-page iteration early
 5. Optional schedule-specific metadata extraction to `weeklyInfo`.
 6. Deletes original blob object (best effort).
 7. Updates document:
@@ -287,15 +290,7 @@ Implemented with NextAuth v5 beta:
   - Store curated links with summary metadata per week/class.
   - Present suggested resources in the weekly dashboard alongside “This week” and “Upcoming”.
 
-### 14.5 Streaming Chat Responses
-
-- Goal: make chat feel faster and more interactive by showing partial responses immediately.
-- Planned approach:
-  - Move chat endpoint output to streaming transport.
-  - Update chat UI to render incremental assistant tokens.
-  - Keep quota accounting compatible with streamed completion metadata.
-
-### 14.6 Mobile/Phone-Friendly UX Improvements
+### 14.5 Mobile/Phone-Friendly UX Improvements
 
 - Goal: improve usability on smaller screens.
 - Planned approach:
@@ -303,7 +298,7 @@ Implemented with NextAuth v5 beta:
   - Improve chat composer and class navigation responsiveness.
   - Validate key flows on common viewport sizes.
 
-### 14.7 Token Usage Feedback in UI
+### 14.6 Token Usage Feedback in UI
 
 - Goal: give users transparent token usage visibility.
 - Planned approach:
@@ -311,7 +306,7 @@ Implemented with NextAuth v5 beta:
   - Show output token usage near each assistant message.
   - Add daily usage indicators to reduce quota surprises.
 
-### 14.8 Chat UI & Response Quality Improvements
+### 14.7 Chat UI & Response Quality Improvements
 
 - Goal: improve readability and answer quality.
 - Planned approach:
@@ -319,7 +314,7 @@ Implemented with NextAuth v5 beta:
   - Improve prompt structure and document-context selection.
   - Add quality checks/fallback behavior for low-confidence outputs.
 
-### 14.9 Schedule Extraction Reliability
+### 14.8 Schedule Extraction Reliability
 
 - Goal: increase success rate across diverse syllabus/schedule formats.
 - Planned approach:
@@ -327,7 +322,7 @@ Implemented with NextAuth v5 beta:
   - Add fallback extraction paths for noisy formatting.
   - Improve normalization for downstream weekly schedule generation.
 
-### 14.10 Auto-Detect Current Week from Course Dates
+### 14.9 Auto-Detect Current Week from Course Dates
 
 - Goal: remove manual week selection and infer current week automatically.
 - Planned approach:
@@ -335,7 +330,7 @@ Implemented with NextAuth v5 beta:
   - Compute current week from today’s date against inferred date ranges.
   - Store inferred anchor data and allow optional manual override.
 
-### 14.11 Open Uploaded Files In-App
+### 14.10 Open Uploaded Files In-App
 
 - Goal: let users open/view submitted files directly on the website.
 - Planned approach:
@@ -343,10 +338,9 @@ Implemented with NextAuth v5 beta:
   - Preserve/serve viewable document assets when needed.
   - Link document list items to in-app viewer.
 
-### 14.12 Upload & Extraction Loading State Improvements
+### 14.11 Richer Loading/Status UX Polish
 
-- Goal: provide clear status during upload and processing.
+- Goal: keep refining upload/processing feedback while preserving the current single loading flow.
 - Planned approach:
-  - Expand progress indicators for upload and extraction phases.
-  - Show queued/processing/done states with better user messaging.
-  - Refresh class document status without confusing intermediate flicker.
+  - Add clearer error recovery and retry affordances.
+  - Improve long-running extraction messaging for edge-case files.
