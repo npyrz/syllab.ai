@@ -1,18 +1,18 @@
 @import "tailwindcss";
 
 :root {
-  --app-bg: #070707;
-  --app-surface: rgba(255, 255, 255, 0.06);
-  --app-panel: rgba(255, 255, 255, 0.04);
-  --app-border: rgba(255, 255, 255, 0.12);
+  --app-bg: #14161a;
+  --app-surface: rgba(255, 255, 255, 0.08);
+  --app-panel: rgba(255, 255, 255, 0.06);
+  --app-border: rgba(255, 255, 255, 0.16);
   --app-text: #f4f4f5;
-  --app-subtle: #a1a1aa;
-  --app-muted: #71717a;
-  --app-sidebar: #101010;
-  --app-elevated: rgba(255, 255, 255, 0.08);
-  --app-chip: rgba(255, 255, 255, 0.08);
-  --app-chip-text: #e4e4e7;
-  --app-shadow: 0 20px 60px rgba(0, 0, 0, 0.35);
+  --app-subtle: #b4b4bd;
+  --app-muted: #8c8c97;
+  --app-sidebar: #1b1d22;
+  --app-elevated: rgba(255, 255, 255, 0.1);
+  --app-chip: rgba(255, 255, 255, 0.1);
+  --app-chip-text: #ececf1;
+  --app-shadow: 0 20px 60px rgba(0, 0, 0, 0.28);
   color-scheme: dark;
 }
 
