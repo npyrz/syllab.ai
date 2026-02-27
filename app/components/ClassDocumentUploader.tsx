@@ -11,7 +11,7 @@ type UploadResult = {
   key: string;
   documentId?: string;
   status?: string;
-  docType?: "syllabus" | "schedule" | "other";
+  docType?: "syllabus" | "schedule" | "lecture_notes" | "other";
 };
 
 type UploadPhase = "idle" | "uploading" | "extracting" | "refreshing";
@@ -26,7 +26,7 @@ function formatFileCount(files: File[]) {
   return `${files.length} Files Selected`;
 }
 
-function inferDocTypeFromFilename(file: File): "syllabus" | "schedule" | "other" {
+function inferDocTypeFromFilename(file: File): "syllabus" | "schedule" | "lecture_notes" | "other" {
   const name = file.name.toLowerCase();
   if (name.includes("syllabus")) return "syllabus";
   if (
@@ -36,6 +36,14 @@ function inferDocTypeFromFilename(file: File): "syllabus" | "schedule" | "other"
     name.includes("timetable")
   ) {
     return "schedule";
+  }
+  if (
+    name.includes("lecture") ||
+    name.includes("notes") ||
+    name.includes("note") ||
+    name.includes("slides")
+  ) {
+    return "lecture_notes";
   }
   return "other";
 }

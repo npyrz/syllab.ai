@@ -2,6 +2,7 @@ import { prisma } from '@/lib/prisma';
 import { extractText } from '@/lib/text-extraction';
 import { del } from '@vercel/blob';
 import { primeCurrentWeekScheduleForClass } from '@/lib/weekly-schedule-sync';
+import { buildReadableLectureNote } from '@/lib/lecture-notes';
 
 const BLOB_FETCH_TIMEOUT_MS = 30_000;
 const TEXT_EXTRACTION_TIMEOUT_MS = 60_000;
@@ -99,12 +100,124 @@ function extractScheduleDeadlines(text: string): Array<{ line: string; hasDeadli
     .filter(item => item.hasDeadlineKeyword);
 }
 
+async function processReadableLectureNote(params: {
+  documentId: string;
+  classId: string;
+  userId: string;
+  filename: string;
+  extractedText: string;
+}) {
+  const normalized = buildReadableLectureNote({
+    filename: params.filename,
+    extractedText: params.extractedText,
+  });
+
+  await prisma.readableNote.upsert({
+    where: { sourceDocumentId: params.documentId },
+    create: {
+      sourceDocumentId: params.documentId,
+      classId: params.classId,
+      userId: params.userId,
+      sourceFilename: params.filename,
+      title: normalized.title,
+      content: normalized.content,
+      status: 'done',
+      errorMessage: null,
+      processedAt: new Date(),
+    },
+    update: {
+      title: normalized.title,
+      content: normalized.content,
+      sourceFilename: params.filename,
+      status: 'done',
+      errorMessage: null,
+      processedAt: new Date(),
+    },
+  });
+}
+
+export async function retryReadableLectureNote(documentId: string): Promise<void> {
+  const document = await prisma.document.findUnique({
+    where: { id: documentId },
+    select: {
+      id: true,
+      classId: true,
+      userId: true,
+      filename: true,
+      docType: true,
+      textExtracted: true,
+      status: true,
+    },
+  });
+
+  if (!document) {
+    throw new Error('Document not found');
+  }
+
+  if (document.docType !== 'lecture_notes') {
+    throw new Error('Readable-note retry is only available for lecture-note documents');
+  }
+
+  await prisma.readableNote.upsert({
+    where: { sourceDocumentId: document.id },
+    create: {
+      sourceDocumentId: document.id,
+      classId: document.classId,
+      userId: document.userId,
+      sourceFilename: document.filename,
+      title: `Lecture Notes • ${document.filename}`,
+      status: 'processing',
+      content: null,
+      errorMessage: null,
+      processedAt: null,
+    },
+    update: {
+      sourceFilename: document.filename,
+      status: 'processing',
+      errorMessage: null,
+      processedAt: null,
+    },
+  });
+
+  try {
+    if (!document.textExtracted?.trim()) {
+      throw new Error('No extracted text available yet for this lecture note');
+    }
+
+    await processReadableLectureNote({
+      documentId: document.id,
+      classId: document.classId,
+      userId: document.userId,
+      filename: document.filename,
+      extractedText: document.textExtracted,
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Failed to process readable notes';
+    await prisma.readableNote.update({
+      where: { sourceDocumentId: document.id },
+      data: {
+        status: 'failed',
+        errorMessage: message,
+        processedAt: new Date(),
+      },
+    });
+    throw error;
+  }
+}
+
 /**
  * Process a document: extract text and update database
  * @param documentId - Document ID to process
  */
 export async function processDocument(documentId: string): Promise<void> {
   console.log(`[Worker] Starting processing for document: ${documentId}`);
+
+  let lectureNoteContext: {
+    id: string;
+    classId: string;
+    userId: string;
+    filename: string;
+  } | null = null;
 
   try {
     // Update status to processing
@@ -120,6 +233,36 @@ export async function processDocument(documentId: string): Promise<void> {
 
     if (!document) {
       throw new Error('Document not found');
+    }
+
+    if (document.docType === 'lecture_notes') {
+      lectureNoteContext = {
+        id: document.id,
+        classId: document.classId,
+        userId: document.userId,
+        filename: document.filename,
+      };
+
+      await prisma.readableNote.upsert({
+        where: { sourceDocumentId: document.id },
+        create: {
+          sourceDocumentId: document.id,
+          classId: document.classId,
+          userId: document.userId,
+          sourceFilename: document.filename,
+          title: `Lecture Notes • ${document.filename}`,
+          status: 'processing',
+          content: null,
+          errorMessage: null,
+          processedAt: null,
+        },
+        update: {
+          sourceFilename: document.filename,
+          status: 'processing',
+          errorMessage: null,
+          processedAt: null,
+        },
+      });
     }
 
     console.log(`[Worker] Extracting text from: ${document.filename}`);
@@ -182,6 +325,31 @@ export async function processDocument(documentId: string): Promise<void> {
       },
     });
 
+    if (document.docType === 'lecture_notes') {
+      try {
+        await processReadableLectureNote({
+          documentId: document.id,
+          classId: document.classId,
+          userId: document.userId,
+          filename: document.filename,
+          extractedText,
+        });
+      } catch (readabilityError) {
+        const message = readabilityError instanceof Error
+          ? readabilityError.message
+          : 'Failed to process readable lecture notes';
+
+        await prisma.readableNote.update({
+          where: { sourceDocumentId: document.id },
+          data: {
+            status: 'failed',
+            errorMessage: message,
+            processedAt: new Date(),
+          },
+        });
+      }
+    }
+
     if (document.docType === 'schedule' || document.docType === 'syllabus') {
       try {
         await primeCurrentWeekScheduleForClass({
@@ -196,6 +364,30 @@ export async function processDocument(documentId: string): Promise<void> {
     console.log(`[Worker] Successfully processed document: ${documentId}`);
   } catch (error) {
     console.error(`[Worker] Error processing document ${documentId}:`, error);
+
+    if (lectureNoteContext) {
+      const message = error instanceof Error ? error.message : 'Failed to process readable lecture notes';
+      await prisma.readableNote.upsert({
+        where: { sourceDocumentId: lectureNoteContext.id },
+        create: {
+          sourceDocumentId: lectureNoteContext.id,
+          classId: lectureNoteContext.classId,
+          userId: lectureNoteContext.userId,
+          sourceFilename: lectureNoteContext.filename,
+          title: `Lecture Notes • ${lectureNoteContext.filename}`,
+          status: 'failed',
+          content: null,
+          errorMessage: message,
+          processedAt: new Date(),
+        },
+        update: {
+          sourceFilename: lectureNoteContext.filename,
+          status: 'failed',
+          errorMessage: message,
+          processedAt: new Date(),
+        },
+      });
+    }
 
     // Update status to failed
     await prisma.document.update({

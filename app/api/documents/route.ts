@@ -14,8 +14,13 @@ const ALLOWED_TYPES = [
 function inferDocType(
   filename: string,
   requestedType?: string | null
-): 'syllabus' | 'schedule' | 'other' {
-  if (requestedType === 'syllabus' || requestedType === 'schedule' || requestedType === 'other') {
+): 'syllabus' | 'schedule' | 'lecture_notes' | 'other' {
+  if (
+    requestedType === 'syllabus' ||
+    requestedType === 'schedule' ||
+    requestedType === 'lecture_notes' ||
+    requestedType === 'other'
+  ) {
     return requestedType;
   }
 
@@ -29,6 +34,16 @@ function inferDocType(
   ) {
     return 'schedule';
   }
+
+  if (
+    normalized.includes('lecture') ||
+    normalized.includes('notes') ||
+    normalized.includes('note') ||
+    normalized.includes('slides')
+  ) {
+    return 'lecture_notes';
+  }
+
   return 'other';
 }
 

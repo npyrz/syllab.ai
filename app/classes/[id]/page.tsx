@@ -32,6 +32,20 @@ type NoteRow = {
   updatedAt: Date;
 };
 
+type ReadableNoteRow = {
+  id: string;
+  classId: string;
+  sourceDocumentId: string;
+  sourceFilename: string;
+  title: string;
+  content: string | null;
+  status: "processing" | "done" | "failed";
+  errorMessage: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+  processedAt: Date | null;
+};
+
 const HIGHLIGHT_RULES = [
   { label: "grading", patterns: [/grading/i, /grade\s+breakdown/i] },
   { label: "deadlines", patterns: [/deadline/i, /due\s+date/i, /submission/i] },
@@ -368,6 +382,27 @@ export default async function ClassDetailPage({
     },
   });
 
+  const readableNotes: ReadableNoteRow[] = await prisma.readableNote.findMany({
+    where: {
+      classId: classRecord.id,
+      userId: classRecord.userId,
+    },
+    orderBy: { updatedAt: "desc" },
+    select: {
+      id: true,
+      classId: true,
+      sourceDocumentId: true,
+      sourceFilename: true,
+      title: true,
+      content: true,
+      status: true,
+      errorMessage: true,
+      createdAt: true,
+      updatedAt: true,
+      processedAt: true,
+    },
+  });
+
   const highlightDocs = await prisma.document.findMany({
     where: {
       classId: classRecord.id,
@@ -473,7 +508,11 @@ export default async function ClassDetailPage({
           </div>
         </section>
 
-        <ClassNotesSection classId={classRecord.id} notes={notes} />
+        <ClassNotesSection
+          classId={classRecord.id}
+          notes={notes}
+          readableNotes={readableNotes}
+        />
       </main>
     </div>
   );

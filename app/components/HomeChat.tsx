@@ -295,16 +295,16 @@ export default function HomeChat({ classes }: { classes: ClassOption[] }) {
               </button>
             ))}
           </div>
-          <div className="mt-3 flex items-center gap-2 text-xs text-[color:var(--app-subtle)]">
-            <label className="inline-flex items-center gap-2">
+          <div className="mt-3">
+            <label className="inline-flex items-center gap-2.5 rounded-xl bg-[color:var(--app-panel)] px-3 py-2 text-xs font-medium text-[color:var(--app-subtle)] ring-1 ring-[color:var(--app-border)]">
               <input
                 type="checkbox"
                 checked={includeNotes}
                 onChange={(event) => setIncludeNotes(event.target.checked)}
                 disabled={isLoading}
-                className="h-3.5 w-3.5 rounded border-[color:var(--app-border)] bg-[color:var(--app-panel)] text-cyan-300 focus:ring-cyan-300"
+                className="h-4 w-4 rounded border-[color:var(--app-border)] bg-[color:var(--app-surface)] text-cyan-300 focus:ring-cyan-300"
               />
-              Include class notes in AI context
+              <span>Include class notes in AI context</span>
             </label>
           </div>
           <div className="mt-4 flex items-center gap-2 rounded-2xl bg-[color:var(--app-panel)] px-4 py-3 ring-1 ring-[color:var(--app-border)]">

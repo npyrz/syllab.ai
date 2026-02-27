@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
+import { retryReadableLectureNote } from "@/lib/document-processor";
 
 const MAX_NOTE_TITLE_LENGTH = 120;
 const MAX_NOTE_CONTENT_LENGTH = 20_000;
@@ -117,6 +118,60 @@ export async function PATCH(req: NextRequest) {
 
   try {
     const body = await req.json();
+
+    if (body?.action === "retryReadableNote") {
+      const sourceDocumentId = String(body?.sourceDocumentId ?? "").trim();
+
+      if (!sourceDocumentId) {
+        return NextResponse.json(
+          { error: "sourceDocumentId is required" },
+          { status: 400 }
+        );
+      }
+
+      const document = await prisma.document.findUnique({
+        where: { id: sourceDocumentId },
+        select: { id: true, userId: true, docType: true },
+      });
+
+      if (!document || document.userId !== session.user.id) {
+        return NextResponse.json({ error: "Document not found" }, { status: 404 });
+      }
+
+      if (document.docType !== "lecture_notes") {
+        return NextResponse.json(
+          { error: "Retry is only supported for lecture-note documents" },
+          { status: 400 }
+        );
+      }
+
+      try {
+        await retryReadableLectureNote(sourceDocumentId);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "Failed to retry readable note";
+        return NextResponse.json({ error: message }, { status: 500 });
+      }
+
+      const readableNote = await prisma.readableNote.findUnique({
+        where: { sourceDocumentId },
+        select: {
+          id: true,
+          classId: true,
+          sourceDocumentId: true,
+          sourceFilename: true,
+          title: true,
+          content: true,
+          status: true,
+          errorMessage: true,
+          createdAt: true,
+          updatedAt: true,
+          processedAt: true,
+        },
+      });
+
+      return NextResponse.json({ success: true, readableNote });
+    }
+
     const id = String(body?.id ?? "").trim();
 
     if (!id) {
