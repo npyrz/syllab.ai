@@ -25,7 +25,7 @@ export default async function Sidebar() {
     : [];
 
   return (
-    <aside className="flex h-dvh w-[80px] flex-col items-center bg-[color:var(--app-sidebar)] text-[color:var(--app-text)]">
+    <aside className="hidden min-h-dvh w-[80px] flex-col items-center bg-[color:var(--app-sidebar)] text-[color:var(--app-text)] md:flex">
       <div className="flex w-full flex-col items-center pt-6">
         {session ? (
           <Link
@@ -71,10 +71,7 @@ export default async function Sidebar() {
         ) : null}
       </div>
 
-      <div className="flex w-full flex-1" />
-
-      <div className="flex w-full flex-col items-center pb-6">
-      </div>
+      <div className="mt-auto w-full pb-6" />
     </aside>
   );
 }

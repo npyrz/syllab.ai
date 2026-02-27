@@ -21,6 +21,8 @@ model User {
   updatedAt    DateTime  @updatedAt
   classes      Class[]
   documents    Document[]
+  notes        Note[]
+  readableNotes ReadableNote[]
   apiUsageDaily ApiUsageDaily[]
 }
 
@@ -36,9 +38,27 @@ model Class {
   updatedAt   DateTime   @updatedAt
   user        User       @relation(fields: [userId], references: [id], onDelete: Cascade)
   documents   Document[]
+  notes       Note[]
+  readableNotes ReadableNote[]
   weekSchedules WeekSchedule[]
 
   @@index([userId])
+}
+
+model Note {
+  id        String   @id @default(cuid())
+  classId   String
+  userId    String
+  title     String   @default("Untitled note")
+  content   String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  class     Class    @relation(fields: [classId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([classId])
+  @@index([userId, classId])
 }
 
 model WeekSchedule {
@@ -79,10 +99,35 @@ model Document {
   processedAt  DateTime?
   user         User            @relation(fields: [userId], references: [id], onDelete: Cascade)
   class        Class           @relation(fields: [classId], references: [id], onDelete: Cascade)
+  readableNotes ReadableNote[]
 
   @@index([userId])
   @@index([classId])
   @@index([status])
+}
+
+model ReadableNote {
+  id               String             @id @default(cuid())
+  classId           String
+  userId            String
+  sourceDocumentId  String
+  sourceFilename    String
+  title             String
+  content           String?
+  status            ReadableNoteStatus @default(processing)
+  errorMessage      String?
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+  processedAt       DateTime?
+  user              User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  class             Class              @relation(fields: [classId], references: [id], onDelete: Cascade)
+  sourceDocument    Document           @relation(fields: [sourceDocumentId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([classId])
+  @@index([sourceDocumentId])
+  @@index([status])
+  @@unique([sourceDocumentId])
 }
 
 model ApiUsageDaily {
@@ -121,5 +166,12 @@ enum DocumentStatus {
 enum DocumentType {
   syllabus
   schedule
+  lecture_notes
   other
+}
+
+enum ReadableNoteStatus {
+  processing
+  done
+  failed
 }

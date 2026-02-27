@@ -19,6 +19,7 @@ AI-powered class management built with Next.js App Router, NextAuth, Prisma, and
   - List classes (sidebar + home)
   - Delete class
   - Set/adjust current week (1–20) for weekly schedule generation
+  - Personal notes per class (create, edit, delete)
 - Document pipeline
   - Upload class documents (`pdf`, `docx`, `doc`) up to 10MB
   - Blob storage upload via Vercel Blob
@@ -31,6 +32,7 @@ AI-powered class management built with Next.js App Router, NextAuth, Prisma, and
   - Unified uploader-owned loading state until processing completes
 - AI class chat (`/api/chat`)
   - Uses only authenticated user + selected class documents
+  - Optional inclusion of class personal notes in AI context
   - Native Groq SDK streaming call with model from `GROQ_CHAT_MODEL` (fallback: `llama-3.3-70b-versatile`)
   - Chat tuning via env: `GROQ_CHAT_TEMPERATURE`, `GROQ_CHAT_REASONING_EFFORT`
   - Daily usage quotas (per-user + global) enforced in DB
@@ -65,6 +67,10 @@ AI-powered class management built with Next.js App Router, NextAuth, Prisma, and
 - `DELETE /api/documents` - delete document by id
 - `GET /api/documents/[id]` - get single owned document
 - `POST /api/chat` - class-scoped AI Q&A
+- `GET /api/notes?classId=...` - list notes for owned class
+- `POST /api/notes` - create class note
+- `PATCH /api/notes` - update class note
+- `DELETE /api/notes` - delete class note
 - `POST /api/schedules/refresh` - precompute next-week schedules (cron-friendly)
 
 ## Tech Stack
@@ -104,7 +110,7 @@ AI-powered class management built with Next.js App Router, NextAuth, Prisma, and
 - Study material generation from lecture content
   - Generate quiz questions and flashcards from uploaded lecture materials.
 - Personal notes support
-  - Add and store user-authored notes per class for blended AI context.
+  - Improve notes editing experience and discoverability in class view.
 - Weekly web resource recommendations
   - If syllabus/schedule includes highlighted weekly topics, scan the web for helpful supporting resources.
   - Return curated links/summaries tied to the current week’s material.

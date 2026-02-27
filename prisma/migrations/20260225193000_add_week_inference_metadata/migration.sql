@@ -1,0 +1,1 @@
+-- no-op migration placeholder restored to satisfy Prisma migration history

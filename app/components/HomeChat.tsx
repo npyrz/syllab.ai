@@ -86,6 +86,7 @@ export default function HomeChat({ classes }: { classes: ClassOption[] }) {
   );
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
+  const [includeNotes, setIncludeNotes] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [streamingMessageId, setStreamingMessageId] = useState<string | null>(null);
   const bottomAnchorRef = useRef<HTMLDivElement | null>(null);
@@ -121,6 +122,7 @@ export default function HomeChat({ classes }: { classes: ClassOption[] }) {
         body: JSON.stringify({
           classId: selectedClassId,
           message: userMessage,
+          includeNotes,
         }),
       });
 
@@ -221,12 +223,12 @@ export default function HomeChat({ classes }: { classes: ClassOption[] }) {
             {messages.map((msg) => (
               <div
                 key={msg.id}
-                className={`mb-5 flex ${
+                className={`mb-4 flex ${
                   msg.role === "user" ? "justify-end" : "justify-start"
                 }`}
               >
                 <div
-                  className={`rounded-2xl px-4 py-4 shadow-sm ${
+                  className={`rounded-2xl px-4 py-3 shadow-sm ${
                     msg.role === "user"
                       ? "max-w-[78%] bg-cyan-300 text-black"
                       : "max-w-[92%] sm:max-w-[88%] lg:max-w-[86%] bg-[color:var(--app-surface)] text-[color:var(--app-text)] ring-1 ring-[color:var(--app-border)]"
@@ -240,7 +242,7 @@ export default function HomeChat({ classes }: { classes: ClassOption[] }) {
                           Thinking…
                         </div>
                       ) : (
-                        <div className="prose prose-sm max-w-none break-words whitespace-pre-wrap text-[color:var(--app-text)] prose-headings:mb-2 prose-headings:mt-5 prose-headings:font-semibold prose-p:my-2 prose-p:whitespace-pre-wrap prose-p:leading-7 prose-ul:my-2 prose-ol:my-2 prose-li:my-1 prose-li:leading-7 prose-strong:text-[color:var(--app-text)] prose-code:rounded prose-code:bg-[color:var(--app-panel)] prose-code:px-1 prose-code:py-0.5 prose-code:text-cyan-300 prose-pre:overflow-x-auto prose-pre:rounded-xl prose-pre:bg-[color:var(--app-panel)] prose-table:my-4 prose-table:w-full prose-table:border-collapse prose-th:border prose-th:border-[color:var(--app-border)] prose-th:bg-[color:var(--app-panel)] prose-th:px-3 prose-th:py-2 prose-th:text-left prose-td:border prose-td:border-[color:var(--app-border)] prose-td:px-3 prose-td:py-2 prose-a:text-cyan-300">
+                        <div className="prose prose-sm max-w-none break-words whitespace-pre-wrap text-[color:var(--app-text)] prose-headings:mb-1 prose-headings:mt-3 prose-headings:font-semibold prose-h1:text-2xl prose-h2:text-xl prose-h3:text-lg prose-h4:text-base prose-p:my-1 prose-p:whitespace-pre-wrap prose-p:leading-6 prose-ul:my-1 prose-ol:my-1 prose-li:my-0.5 prose-li:leading-6 prose-strong:text-[color:var(--app-text)] prose-code:rounded prose-code:bg-[color:var(--app-panel)] prose-code:px-1 prose-code:py-0.5 prose-code:text-cyan-300 prose-pre:overflow-x-auto prose-pre:rounded-xl prose-pre:bg-[color:var(--app-panel)] prose-table:my-2 prose-table:w-full prose-table:border-collapse prose-table:overflow-hidden prose-table:rounded-lg prose-table:ring-1 prose-table:ring-[color:var(--app-border)] prose-thead:border-b prose-thead:border-[color:var(--app-border)] prose-th:border-r prose-th:border-[color:var(--app-border)] prose-th:bg-[color:var(--app-panel)] prose-th:px-3 prose-th:py-2 prose-th:text-left prose-th:last:border-r-0 prose-tr:border-b prose-tr:border-[color:var(--app-border)] prose-tr:last:border-b-0 prose-td:border-r prose-td:border-[color:var(--app-border)] prose-td:px-3 prose-td:py-2 prose-td:last:border-r-0 prose-a:text-cyan-300">
                           <ReactMarkdown remarkPlugins={[remarkGfm]}>
                             {msg.content}
                           </ReactMarkdown>
@@ -292,6 +294,18 @@ export default function HomeChat({ classes }: { classes: ClassOption[] }) {
                 {course.title}
               </button>
             ))}
+          </div>
+          <div className="mt-3">
+            <label className="inline-flex items-center gap-2.5 rounded-xl bg-[color:var(--app-panel)] px-3 py-2 text-xs font-medium text-[color:var(--app-subtle)] ring-1 ring-[color:var(--app-border)]">
+              <input
+                type="checkbox"
+                checked={includeNotes}
+                onChange={(event) => setIncludeNotes(event.target.checked)}
+                disabled={isLoading}
+                className="h-4 w-4 rounded border-[color:var(--app-border)] bg-[color:var(--app-surface)] text-cyan-300 focus:ring-cyan-300"
+              />
+              <span>Include class notes in AI context</span>
+            </label>
           </div>
           <div className="mt-4 flex items-center gap-2 rounded-2xl bg-[color:var(--app-panel)] px-4 py-3 ring-1 ring-[color:var(--app-border)]">
             <input
