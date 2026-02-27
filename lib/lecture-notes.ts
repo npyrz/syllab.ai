@@ -22,17 +22,6 @@ function normalizeWhitespace(value: string) {
     .trim();
 }
 
-function repairMergedWords(value: string) {
-  return value
-    .replace(/homogeneousequation/gi, "homogeneous equation")
-    .replace(/tothis/gi, "to this")
-    .replace(/generalsolution/gi, "general solution")
-    .replace(/usingreduction/gi, "using reduction")
-    .replace(/orderNagle/gi, "order Nagle")
-    .replace(/Chapter\s*4\.7Friday/gi, "Chapter 4.7 Friday")
-    .replace(/\s+,/g, ",");
-}
-
 function isLikelyNoise(line: string) {
   return (
     /^page\s+\d+/i.test(line) ||
@@ -76,7 +65,6 @@ function splitIntoFragments(raw: string) {
   return seeded
     .split(/\n+/)
     .map((line) => normalizeWhitespace(line))
-    .map((line) => repairMergedWords(line))
     .filter(Boolean);
 }
 
