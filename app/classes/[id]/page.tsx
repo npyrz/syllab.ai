@@ -5,6 +5,7 @@ import { notFound, redirect } from "next/navigation";
 import ClassDocumentUploader from "@/app/components/ClassDocumentUploader";
 import ClassDocumentList from "@/app/components/ClassDocumentList";
 import ClassDeleteButton from "@/app/components/ClassDeleteButton";
+import ClassNotesSection from "@/app/components/ClassNotesSection";
 import WeekDashboardLoader from "@/app/components/WeekDashboardLoader";
 import WeeklyScheduleSkeleton from "@/app/components/WeeklyScheduleSkeleton";
 import {
@@ -20,6 +21,15 @@ type DocumentRow = {
   status: string;
   createdAt: Date;
   processedAt: Date | null;
+};
+
+type NoteRow = {
+  id: string;
+  classId: string;
+  title: string;
+  content: string;
+  createdAt: Date;
+  updatedAt: Date;
 };
 
 const HIGHLIGHT_RULES = [
@@ -342,6 +352,22 @@ export default async function ClassDetailPage({
     .filter((doc) => doc.status === "pending" || doc.status === "processing")
     .map((doc) => doc.id);
 
+  const notes: NoteRow[] = await prisma.note.findMany({
+    where: {
+      classId: classRecord.id,
+      userId: classRecord.userId,
+    },
+    orderBy: { updatedAt: "desc" },
+    select: {
+      id: true,
+      classId: true,
+      title: true,
+      content: true,
+      createdAt: true,
+      updatedAt: true,
+    },
+  });
+
   const highlightDocs = await prisma.document.findMany({
     where: {
       classId: classRecord.id,
@@ -446,6 +472,8 @@ export default async function ClassDetailPage({
             </div>
           </div>
         </section>
+
+        <ClassNotesSection classId={classRecord.id} notes={notes} />
       </main>
     </div>
   );

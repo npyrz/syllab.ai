@@ -86,6 +86,7 @@ export default function HomeChat({ classes }: { classes: ClassOption[] }) {
   );
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
+  const [includeNotes, setIncludeNotes] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [streamingMessageId, setStreamingMessageId] = useState<string | null>(null);
   const bottomAnchorRef = useRef<HTMLDivElement | null>(null);
@@ -121,6 +122,7 @@ export default function HomeChat({ classes }: { classes: ClassOption[] }) {
         body: JSON.stringify({
           classId: selectedClassId,
           message: userMessage,
+          includeNotes,
         }),
       });
 
@@ -292,6 +294,18 @@ export default function HomeChat({ classes }: { classes: ClassOption[] }) {
                 {course.title}
               </button>
             ))}
+          </div>
+          <div className="mt-3 flex items-center gap-2 text-xs text-[color:var(--app-subtle)]">
+            <label className="inline-flex items-center gap-2">
+              <input
+                type="checkbox"
+                checked={includeNotes}
+                onChange={(event) => setIncludeNotes(event.target.checked)}
+                disabled={isLoading}
+                className="h-3.5 w-3.5 rounded border-[color:var(--app-border)] bg-[color:var(--app-panel)] text-cyan-300 focus:ring-cyan-300"
+              />
+              Include class notes in AI context
+            </label>
           </div>
           <div className="mt-4 flex items-center gap-2 rounded-2xl bg-[color:var(--app-panel)] px-4 py-3 ring-1 ring-[color:var(--app-border)]">
             <input

@@ -138,7 +138,7 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const { classId, message } = await req.json();
+    const { classId, message, includeNotes } = await req.json();
 
     if (!classId || !message) {
       return NextResponse.json(
@@ -148,6 +148,7 @@ export async function POST(req: NextRequest) {
     }
 
     const userId = session.user.id as string;
+    const shouldIncludeNotes = Boolean(includeNotes);
 
     // Verify class ownership
     const classRecord = await prisma.class.findUnique({
@@ -176,18 +177,45 @@ export async function POST(req: NextRequest) {
       },
     });
 
-    // Build context from documents
-    const context = documents
+    const notes = shouldIncludeNotes
+      ? await prisma.note.findMany({
+          where: {
+            classId: classId,
+            userId: userId,
+          },
+          orderBy: { updatedAt: 'desc' },
+          select: {
+            id: true,
+            title: true,
+            content: true,
+          },
+        })
+      : [];
+
+    const documentContext = documents
       .map(
         (doc) =>
           `[Document: ${doc.filename}]\n${doc.textExtracted}`
       )
       .join('\n\n---\n\n');
 
+    const notesContext = notes
+      .filter((note) => note.content.trim().length > 0)
+      .map((note) => `[Note: ${note.title}]\n${note.content}`)
+      .join('\n\n---\n\n');
+
+    const contextParts = [documentContext];
+    if (notesContext) {
+      contextParts.push(notesContext);
+    }
+    const context = contextParts.filter(Boolean).join('\n\n---\n\n');
+
     if (!context) {
       return NextResponse.json(
         {
-          error: 'No documents found for this class. Upload and process documents first.',
+          error: shouldIncludeNotes
+            ? 'No context found for this class. Upload documents or add class notes first.'
+            : 'No documents found for this class. Upload and process documents first.',
         },
         { status: 400 }
       );
@@ -209,7 +237,10 @@ ${context}
 - Never output XML tags, raw document text, or reasoning scaffolding. Just give a clean, readable answer.`;
 
     console.log(`[Chat] Processing query for class ${classId}: "${message}"`);
-    console.log(`[Chat] Using context from ${documents.length} document(s)`);
+    console.log(
+      `[Chat] Using context from ${documents.length} document(s)` +
+        (shouldIncludeNotes ? ` and ${notes.length} note(s)` : '')
+    );
 
     const userRecord = await prisma.user.findUnique({
       where: { id: userId },

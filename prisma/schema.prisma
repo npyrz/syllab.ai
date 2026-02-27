@@ -21,6 +21,7 @@ model User {
   updatedAt    DateTime  @updatedAt
   classes      Class[]
   documents    Document[]
+  notes        Note[]
   apiUsageDaily ApiUsageDaily[]
 }
 
@@ -36,9 +37,26 @@ model Class {
   updatedAt   DateTime   @updatedAt
   user        User       @relation(fields: [userId], references: [id], onDelete: Cascade)
   documents   Document[]
+  notes       Note[]
   weekSchedules WeekSchedule[]
 
   @@index([userId])
+}
+
+model Note {
+  id        String   @id @default(cuid())
+  classId   String
+  userId    String
+  title     String   @default("Untitled note")
+  content   String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  class     Class    @relation(fields: [classId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([classId])
+  @@index([userId, classId])
 }
 
 model WeekSchedule {
