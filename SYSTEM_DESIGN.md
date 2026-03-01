@@ -328,6 +328,30 @@ Implemented with NextAuth v5 beta:
 - Planned approach:
   - Detect term anchor dates from syllabus/schedule text.
   - Compute current week from today’s date against inferred date ranges.
+
+### 14.10 Fix Weekly Recommendations
+
+- Goal: improve recommendation quality and reliability in the weekly dashboard.
+- Planned approach:
+  - Tighten topic extraction and recommendation ranking signals.
+  - Add guardrails for low-confidence weeks and sparse context.
+  - Improve consistency of suggested resources across refreshes.
+
+### 14.11 Calendar Page
+
+- Goal: provide a calendar view for course schedule items.
+- Planned approach:
+  - Add a dedicated calendar page route in the app.
+  - Render weekly/dated schedule items in a calendar-friendly layout.
+  - Keep calendar data scoped to authenticated owned classes.
+
+### 14.12 Unified All-Classes Calendar System (Post-Beta)
+
+- Goal: combine all class schedules into one consolidated calendar system.
+- Planned approach:
+  - Aggregate schedule events across all user-owned classes.
+  - Provide filtering/toggling by class in a shared timeline view.
+  - Roll out after beta stabilization as a cross-class planning layer.
   - Store inferred anchor data and allow optional manual override.
 
 ### 14.10 Open Uploaded Files In-App

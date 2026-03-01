@@ -98,6 +98,12 @@ AI-powered class management built with Next.js App Router, NextAuth, Prisma, and
 
 ## Upcoming Features
 
+- Fix weekly recommendations
+  - Improve recommendation relevance, ranking, and consistency across weeks.
+- Add a calendar page
+  - Introduce a unified calendar view for class schedule items.
+- Combined all-classes calendar system (post-beta)
+  - Expand the calendar into a single system that aggregates all class timelines in one place.
 - Phone-friendly chat and class experience
   - Improve responsive layout and controls for mobile screens.
 - Token usage visibility in chat UI
@@ -119,13 +125,3 @@ AI-powered class management built with Next.js App Router, NextAuth, Prisma, and
 - Weekly web resource recommendations
   - If syllabus/schedule includes highlighted weekly topics, scan the web for helpful supporting resources.
   - Return curated links/summaries tied to the current week’s material.
-
-## Scripts
-
-- `npm run dev` - start development server
-- `npm run build` - production build
-- `npm run start` - run built app
-- `npm run lint` - run ESLint
-- `npm run prisma:generate` - generate Prisma client
-- `npm run prisma:migrate` - run Prisma migrations (dev)
-- `npm run prisma:studio` - open Prisma Studio
