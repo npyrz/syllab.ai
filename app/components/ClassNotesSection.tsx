@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -31,6 +31,19 @@ type ReadableNoteItem = {
   processedAt: string | Date | null;
 };
 
+type CuratedResourceItem = {
+  title: string;
+  type: "Article" | "Video" | "Course Notes";
+  source: string;
+  url: string;
+  summary: string;
+};
+
+type CuratedResourcePayload = {
+  concept_title: string;
+  resources: CuratedResourceItem[];
+};
+
 function formatDate(value: string | Date) {
   const date = typeof value === "string" ? new Date(value) : value;
   if (Number.isNaN(date.getTime())) return "";
@@ -56,6 +69,10 @@ export default function ClassNotesSection({
   const [pendingRetryIds, setPendingRetryIds] = useState<Record<string, boolean>>({});
   const [drafts, setDrafts] = useState<Record<string, { title: string; content: string }>>({});
   const [generatedItems, setGeneratedItems] = useState<ReadableNoteItem[]>(readableNotes);
+  const [resourcePayload, setResourcePayload] = useState<CuratedResourcePayload | null>(null);
+  const [resourceLoading, setResourceLoading] = useState(false);
+  const [resourceError, setResourceError] = useState<string | null>(null);
+  const [hasAutoRequestedResources, setHasAutoRequestedResources] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const orderedItems = useMemo(
@@ -267,6 +284,53 @@ export default function ClassNotesSection({
     }
   };
 
+  const generateResources = useCallback(async () => {
+    if (resourceLoading) return;
+
+    setResourceLoading(true);
+    setResourceError(null);
+
+    try {
+      const response = await fetch("/api/resources", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ classId }),
+      });
+
+      const payload = await response.json();
+      if (!response.ok) {
+        throw new Error(payload?.error || "Failed to generate resources");
+      }
+
+      setResourcePayload(payload as CuratedResourcePayload);
+    } catch (err) {
+      setResourcePayload(null);
+      setResourceError(err instanceof Error ? err.message : "Failed to generate resources");
+    } finally {
+      setResourceLoading(false);
+    }
+  }, [classId, resourceLoading]);
+
+  useEffect(() => {
+    if (hasAutoRequestedResources) return;
+    if (resourceLoading) return;
+    if (resourcePayload) return;
+    if (resourceError) return;
+
+    const hasReadyLectureNotes = generatedItems.some((item) => item.status === "done" && Boolean(item.content));
+    if (!hasReadyLectureNotes) return;
+
+    setHasAutoRequestedResources(true);
+    void generateResources();
+  }, [
+    generatedItems,
+    hasAutoRequestedResources,
+    resourceLoading,
+    resourcePayload,
+    resourceError,
+    generateResources,
+  ]);
+
   return (
     <section className="mt-10">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -316,6 +380,66 @@ export default function ClassNotesSection({
               <div className="text-[11px] text-[color:var(--app-subtle)]">Auto-generated from uploads</div>
             </div>
             <div className="mt-3 grid gap-3">
+              <div className="rounded-2xl bg-[color:var(--app-panel)] p-4 ring-1 ring-[color:var(--app-border)]">
+                <div>
+                  <div>
+                    <div className="text-sm font-semibold text-[color:var(--app-text)]">External Learning Resources</div>
+                    <div className="mt-1 text-[11px] text-[color:var(--app-subtle)]">
+                      Curated from lecture-note content for this class
+                    </div>
+                  </div>
+                </div>
+
+                {resourceLoading ? (
+                  <div className="mt-3 text-xs text-[color:var(--app-subtle)]">Generating curated resources...</div>
+                ) : null}
+
+                {resourcePayload?.concept_title ? (
+                  <div className="mt-3 text-xs text-[color:var(--app-text)]">
+                    <span className="font-semibold">Primary concept:</span> {resourcePayload.concept_title}
+                  </div>
+                ) : null}
+
+                {resourcePayload && resourcePayload.resources.length === 0 ? (
+                  <div className="mt-3 rounded-xl bg-[color:var(--app-surface)] p-3 text-xs text-[color:var(--app-subtle)] ring-1 ring-[color:var(--app-border)]">
+                    Could not confidently find 3 trusted resources from the available lecture notes.
+                  </div>
+                ) : null}
+
+                {resourcePayload && resourcePayload.resources.length > 0 ? (
+                  <div className="mt-3 grid gap-2">
+                    {resourcePayload.resources.map((resource) => (
+                      <div
+                        key={resource.url}
+                        className="rounded-xl bg-[color:var(--app-surface)] p-3 ring-1 ring-[color:var(--app-border)]"
+                      >
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <a
+                            href={resource.url}
+                            target="_blank"
+                            rel="noreferrer noopener"
+                            className="text-sm font-semibold text-cyan-300 hover:underline"
+                          >
+                            {resource.title}
+                          </a>
+                          <span className="rounded-full bg-[color:var(--app-chip)] px-2.5 py-1 text-[10px] font-medium text-[color:var(--app-chip-text)] ring-1 ring-[color:var(--app-border)]">
+                            {resource.type}
+                          </span>
+                        </div>
+                        <div className="mt-1 text-[11px] text-[color:var(--app-subtle)]">{resource.source}</div>
+                        <p className="mt-2 text-xs leading-5 text-[color:var(--app-text)]">{resource.summary}</p>
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
+
+                {resourceError ? (
+                  <div className="mt-3 rounded-xl bg-red-500/10 p-2 text-xs text-red-300 ring-1 ring-red-500/20">
+                    {resourceError}
+                  </div>
+                ) : null}
+              </div>
+
               {orderedGeneratedItems.map((item) => {
                 const isRetrying = Boolean(pendingRetryIds[item.sourceDocumentId]);
                 const statusLabel =

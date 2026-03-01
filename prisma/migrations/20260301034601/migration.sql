@@ -1,0 +1,2 @@
+-- RenameIndex
+ALTER INDEX "WeekRecommendation_classId_week_scheduleFingerprint_syllabusFin" RENAME TO "WeekRecommendation_classId_week_scheduleFingerprint_syllabu_key";

@@ -16,28 +16,32 @@ export default async function WeekDashboardLoader({
   userId: string;
   currentWeek: number | null;
 }) {
-  if (!currentWeek) return null;
+  const weekSchedule = currentWeek
+    ? await getOrCreateWeekScheduleForClass({
+        classId,
+        userId,
+        targetWeek: currentWeek,
+      })
+    : null;
 
-  const weekSchedule = await getOrCreateWeekScheduleForClass({
-    classId,
-    userId,
-    targetWeek: currentWeek,
-  });
-
-  if (!weekSchedule) return null;
+  if (!weekSchedule) {
+    return null;
+  }
 
   return (
     <>
-      <section className="mt-10">
-        <WeeklySchedule
-          currentWeek={weekSchedule.week}
-          weekStart={parseISODate(weekSchedule.weekStartISO)}
-          weekEnd={parseISODate(weekSchedule.weekEndISO)}
-          days={weekSchedule.days}
-        />
-      </section>
+      {weekSchedule ? (
+        <section className="mt-10">
+          <WeeklySchedule
+            currentWeek={weekSchedule.week}
+            weekStart={parseISODate(weekSchedule.weekStartISO)}
+            weekEnd={parseISODate(weekSchedule.weekEndISO)}
+            days={weekSchedule.days}
+          />
+        </section>
+      ) : null}
 
-      {weekSchedule.upcoming.length > 0 ? (
+      {weekSchedule && weekSchedule.upcoming.length > 0 ? (
         <section className="mt-10">
           <h2 className="text-sm font-semibold tracking-wide text-[color:var(--app-text)]">
             Upcoming
