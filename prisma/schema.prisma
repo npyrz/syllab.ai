@@ -41,8 +41,29 @@ model Class {
   notes       Note[]
   readableNotes ReadableNote[]
   weekSchedules WeekSchedule[]
+  weekRecommendations WeekRecommendation[]
 
   @@index([userId])
+}
+
+model WeekRecommendation {
+  id                  String   @id @default(cuid())
+  classId             String
+  week                Int
+  topicSource         String
+  topicSummary        String
+  topics              Json
+  resources           Json
+  generatedAtISO      String
+  scheduleFingerprint String
+  syllabusFingerprint String
+  model               String
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+  class               Class    @relation(fields: [classId], references: [id], onDelete: Cascade)
+
+  @@index([classId, week])
+  @@unique([classId, week, scheduleFingerprint, syllabusFingerprint])
 }
 
 model Note {

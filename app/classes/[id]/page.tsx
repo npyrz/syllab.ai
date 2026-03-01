@@ -8,6 +8,7 @@ import ClassDeleteButton from "@/app/components/ClassDeleteButton";
 import ClassNotesSection from "@/app/components/ClassNotesSection";
 import WeekDashboardLoader from "@/app/components/WeekDashboardLoader";
 import WeeklyScheduleSkeleton from "@/app/components/WeeklyScheduleSkeleton";
+import WeeklyResourcesSection from "@/app/components/WeeklyResourcesSection";
 import {
   computeEffectiveCurrentWeek,
 } from "@/lib/week-utils";
@@ -461,6 +462,11 @@ export default async function ClassDetailPage({
             currentWeek={effectiveCurrentWeek}
           />
         </Suspense>
+
+        <WeeklyResourcesSection
+          classId={classRecord.id}
+          currentWeek={effectiveCurrentWeek}
+        />
 
         {highlights.length ? (
           <section className="mt-10">

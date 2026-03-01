@@ -104,6 +104,8 @@ export type CuratedResourcePayload = {
   resources: CuratedResource[];
 };
 
+export type WeeklyTopicSource = "schedule" | "syllabus" | "combined";
+
 function normalizePayload(payload: Record<string, unknown>): CuratedResourcePayload {
   const conceptTitle =
     typeof payload.concept_title === "string" && payload.concept_title.trim().length > 0
@@ -169,6 +171,13 @@ function buildLectureNotesSnippet(notes: string[]) {
     })
     .join("\n\n---\n\n")
     .slice(0, 22000);
+}
+
+function buildTopicSnippet(topics: string[]) {
+  return topics
+    .map((topic, index) => `${index + 1}. ${topic.trim()}`)
+    .join("\n")
+    .slice(0, 4000);
 }
 
 export async function curateResourcesFromLectureNotes(params: {
@@ -237,6 +246,84 @@ ${notesContext}`;
     return normalizePayload(parsed);
   } catch (error) {
     console.error("[ResourceCurator] Failed to generate resources:", error);
+    return { concept_title: "", resources: [] };
+  }
+}
+
+export async function curateResourcesFromWeeklyTopics(params: {
+  classTitle?: string;
+  week: number;
+  topicSource: WeeklyTopicSource;
+  topics: string[];
+}): Promise<CuratedResourcePayload> {
+  const normalizedTopics = params.topics.map((value) => value.trim()).filter(Boolean).slice(0, 8);
+  if (normalizedTopics.length === 0) {
+    return { concept_title: "", resources: [] };
+  }
+
+  const model = resolveResourceModel();
+  const topicContext = buildTopicSnippet(normalizedTopics);
+
+  const prompt = `You are an academic resource curator.
+
+Task:
+Given a class's current week topics, recommend exactly 3 high-quality external learning resources ranked by relevance.
+
+Rules:
+- Work for any subject area (STEM, humanities, social sciences, business, arts, etc.).
+- Prioritize reputable educational sources: universities (.edu), MIT OCW, OpenStax, Khan Academy, peer-reviewed educational orgs, and high-quality instructor lectures.
+- Avoid low-quality or random blogs.
+- URLs must be realistic HTTPS links.
+- Keep each summary concise and useful (2-3 sentences max).
+- Return resources in descending relevance order to this specific week.
+- Choose resources that directly help with this week's topics.
+- Infer the exact course domain from class title + topics (e.g., Differential Equations vs Calculus vs Linear Algebra).
+- Never return generic concept titles such as "math", "science", or "engineering".
+- Prefer section-title context over bare section-number matches.
+- If topics indicate Differential Equations, prefer ODE/Laplace/Fourier/PDE resources, not generic Calculus integration resources.
+
+Output format requirements:
+- Return JSON only with keys: concept_title, resources.
+- resources must contain exactly 3 items.
+- Each item must include: title, type, source, url, summary.
+- type must be one of: Article | Video | Course Notes.
+- If you cannot confidently provide 3 quality resources, return resources as an empty array.
+
+Class title: ${params.classTitle?.trim() || "(unknown)"}
+Current week: ${params.week}
+Topic source preference used: ${params.topicSource}
+
+Week topics:
+${topicContext}`;
+
+  try {
+    const completion = await groqClient.chat.completions.create({
+      model,
+      temperature: clampTemperature(RESOURCE_TEMPERATURE, 0.2),
+      max_completion_tokens: 1300,
+      ...(supportsReasoningEffort(model)
+        ? { reasoning_effort: RESOURCE_REASONING_EFFORT }
+        : {}),
+      response_format: { type: "json_object" },
+      messages: [
+        {
+          role: "system",
+          content:
+            "You are a strict JSON generator. Return only a valid JSON object with no markdown, commentary, or extra keys.",
+        },
+        { role: "user", content: prompt },
+      ],
+    });
+
+    const raw = completion.choices[0]?.message?.content ?? "";
+    const parsed = parseJsonObject(raw);
+    if (!parsed) {
+      return { concept_title: "", resources: [] };
+    }
+
+    return normalizePayload(parsed);
+  } catch (error) {
+    console.error("[ResourceCurator] Failed to generate weekly resources:", error);
     return { concept_title: "", resources: [] };
   }
 }
