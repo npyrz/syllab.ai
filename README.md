@@ -37,6 +37,10 @@ AI-powered class management built with Next.js App Router, NextAuth, Prisma, and
   - Chat tuning via env: `GROQ_CHAT_TEMPERATURE`, `GROQ_CHAT_REASONING_EFFORT`
   - Daily usage quotas (per-user + global) enforced in DB
   - Source filename attribution streamed via end-of-response metadata marker
+- Lecture-note resource curation (`/api/resources`)
+  - Analyzes uploaded lecture notes for a class and extracts a primary concept title
+  - Returns exactly 3 curated external learning resources when quality gates pass
+  - Restricts to trusted educational sources and strict JSON output shape
 - Weekly schedule dashboard
   - AI-generated “This week” + “Upcoming” cards from schedule/syllabus text
   - Schedule tuning via env: `GROQ_SCHEDULE_TEMPERATURE`, `GROQ_SCHEDULE_REASONING_EFFORT`
@@ -67,6 +71,7 @@ AI-powered class management built with Next.js App Router, NextAuth, Prisma, and
 - `DELETE /api/documents` - delete document by id
 - `GET /api/documents/[id]` - get single owned document
 - `POST /api/chat` - class-scoped AI Q&A
+- `POST /api/resources` - curated external learning resources from class lecture notes
 - `GET /api/notes?classId=...` - list notes for owned class
 - `POST /api/notes` - create class note
 - `PATCH /api/notes` - update class note
