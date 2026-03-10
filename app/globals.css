@@ -44,3 +44,12 @@ body {
   color: var(--app-text);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+.week-verifier-select {
+  color-scheme: light;
+}
+
+.week-verifier-select option {
+  color: #0f172a;
+  background-color: #ffffff;
+}

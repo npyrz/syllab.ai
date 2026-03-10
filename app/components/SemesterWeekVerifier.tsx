@@ -53,7 +53,7 @@ export default function SemesterWeekVerifier({
             <select
               value={currentWeek}
               onChange={(e) => setCurrentWeek(Number(e.target.value))}
-              className="mt-2 w-full rounded-xl bg-[color:var(--app-panel)] px-3 py-2.5 text-xs text-[color:var(--app-text)] ring-1 ring-[color:var(--app-border)] focus:outline-none focus:ring-2 focus:ring-cyan-300"
+              className="week-verifier-select mt-2 w-full rounded-xl bg-[color:var(--app-panel)] px-3 py-2.5 text-xs text-[color:var(--app-text)] ring-1 ring-[color:var(--app-border)] focus:outline-none focus:ring-2 focus:ring-cyan-300"
             >
               {WEEKS.map((w) => (
                 <option key={w} value={w}>
