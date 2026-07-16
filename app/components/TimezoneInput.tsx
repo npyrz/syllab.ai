@@ -1,18 +1,13 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 
 type TimezoneInputProps = {
   name?: string;
 };
 
 export default function TimezoneInput({ name = "timezone" }: TimezoneInputProps) {
-  const [timezone, setTimezone] = useState("");
-
-  useEffect(() => {
-    const resolved = Intl.DateTimeFormat().resolvedOptions().timeZone;
-    if (resolved) setTimezone(resolved);
-  }, []);
+  const [timezone] = useState(() => Intl.DateTimeFormat().resolvedOptions().timeZone || "");
 
   return <input type="hidden" name={name} value={timezone} />;
 }

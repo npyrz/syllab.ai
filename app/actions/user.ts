@@ -2,16 +2,31 @@
 
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
+import { syncUserClassWeeksIfNeeded } from "@/lib/week-rollover";
 
 export async function touchLastSeenAction() {
   const session = await auth();
   const userId = (session?.user as unknown as { id?: string } | undefined)?.id;
   if (!userId) return;
 
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { lastSeenAt: true, lastLoginAt: true },
+  });
+
+  const now = new Date();
+
+  await syncUserClassWeeksIfNeeded({
+    userId,
+    now,
+    previousSeenAt: user?.lastSeenAt,
+    previousLoginAt: user?.lastLoginAt,
+  });
+
   // Avoid throwing if the user record does not exist yet.
   await prisma.user.updateMany({
     where: { id: userId },
-    data: { lastSeenAt: new Date() },
+    data: { lastSeenAt: now },
   });
 }
 

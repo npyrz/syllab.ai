@@ -32,6 +32,7 @@ export type WeekRawRow = {
   dateToken: string;
   lectureCell?: string;
   discussionCell?: string;
+  labCell?: string;
   quizCell?: string;
   sectionCell?: string;
   notes?: string;
@@ -81,59 +82,82 @@ function isMissingWeekScheduleTableError(error: unknown): boolean {
 }
 
 function normalizeDateString(input: string): { iso: string; label: string } | null {
-  const patterns = [
-    /(\d{1,2})[\s\-](Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*(,?\s*\d{4})?/i,
-    /(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*(\s+|\-)(\d{1,2})(,?\s*\d{4})?/i,
+  const value = input.trim();
+  if (!value) return null;
+
+  const monthNames = [
+    "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+    "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
   ];
 
-  for (let i = 0; i < patterns.length; i++) {
-    const pattern = patterns[i];
-    const match = input.trim().match(pattern);
-    if (!match) continue;
-
-    let day: number | null = null;
-    let monthStr: string | null = null;
-    let year = new Date().getUTCFullYear();
-
-    if (i === 0) {
-      day = Number.parseInt(match[1], 10);
-      monthStr = match[2];
-      if (match[3]) {
-        const extractedYear = Number.parseInt(match[3].replace(/[^\d]/g, ""), 10);
-        if (!Number.isNaN(extractedYear)) year = extractedYear;
-      }
-    } else {
-      monthStr = match[1];
-      day = Number.parseInt(match[3], 10);
-      if (match[4]) {
-        const extractedYear = Number.parseInt(match[4].replace(/[^\d]/g, ""), 10);
-        if (!Number.isNaN(extractedYear)) year = extractedYear;
-      }
-    }
-
-    if (!day || !monthStr) continue;
-
-    const monthIndex = [
-      "Jan", "Feb", "Mar", "Apr", "May", "Jun",
-      "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
-    ].findIndex((m) => m.toLowerCase() === monthStr.toLowerCase().slice(0, 3));
-
-    if (monthIndex < 0) continue;
-
+  const fromYmd = value.match(/^(\d{4})[\/-](\d{1,2})[\/-](\d{1,2})$/);
+  if (fromYmd) {
+    const year = Number.parseInt(fromYmd[1], 10);
+    const monthIndex = Number.parseInt(fromYmd[2], 10) - 1;
+    const day = Number.parseInt(fromYmd[3], 10);
     const date = new Date(Date.UTC(year, monthIndex, day));
-    if (Number.isNaN(date.getTime())) continue;
-
-    return {
-      iso: date.toISOString().slice(0, 10),
-      label: date.toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" }),
-    };
+    if (!Number.isNaN(date.getTime())) {
+      return {
+        iso: date.toISOString().slice(0, 10),
+        label: date.toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" }),
+      };
+    }
   }
 
-  return null;
+  const dayMonth = value.match(
+    /^(\d{1,2})[\s\-](Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*(?:,?\s*(\d{4}))?$/i
+  );
+  const monthDay = value.match(
+    /^(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*(?:\s+|\-)(\d{1,2})(?:,?\s*(\d{4}))?$/i
+  );
+  const numericMd = value.match(/^(\d{1,2})[\/-](\d{1,2})(?:[\/-](\d{2,4}))?$/);
+
+  let day: number | null = null;
+  let monthIndex = -1;
+  let year = new Date().getUTCFullYear();
+
+  if (dayMonth) {
+    day = Number.parseInt(dayMonth[1], 10);
+    monthIndex = monthNames.findIndex((m) => m.toLowerCase() === dayMonth[2].toLowerCase().slice(0, 3));
+    if (dayMonth[3]) year = Number.parseInt(dayMonth[3], 10);
+  } else if (monthDay) {
+    day = Number.parseInt(monthDay[2], 10);
+    monthIndex = monthNames.findIndex((m) => m.toLowerCase() === monthDay[1].toLowerCase().slice(0, 3));
+    if (monthDay[3]) year = Number.parseInt(monthDay[3], 10);
+  } else if (numericMd) {
+    const month = Number.parseInt(numericMd[1], 10);
+    day = Number.parseInt(numericMd[2], 10);
+    monthIndex = month - 1;
+    if (numericMd[3]) {
+      const parsedYear = Number.parseInt(numericMd[3], 10);
+      year = parsedYear < 100 ? 2000 + parsedYear : parsedYear;
+    }
+  }
+
+  if (!day || monthIndex < 0 || monthIndex > 11 || Number.isNaN(year)) return null;
+
+  const date = new Date(Date.UTC(year, monthIndex, day));
+  if (Number.isNaN(date.getTime())) return null;
+
+  return {
+    iso: date.toISOString().slice(0, 10),
+    label: date.toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" }),
+  };
+}
+
+function truncateLikelyAppendixSections(text: string): string {
+  const headingRegex =
+    /(?:^|\n)\s*(Section\s+Number|Section\s+Title|MyLab\s+Homework\s+Due\s+Date|Homework\s+Due\s+Date|Course\s+Policies|Grading\s+Policy|Office\s+Hours)\b/gi;
+  const match = headingRegex.exec(text);
+  if (!match || typeof match.index !== "number") return text;
+  if (match.index < 120) return text;
+  return text.slice(0, match.index).trim();
 }
 
 function normalizeScheduleTextForModel(text: string): string {
-  return text
+  const trimmed = truncateLikelyAppendixSections(text);
+
+  return trimmed
     .replace(/\r/g, "\n")
     .replace(/\u00a0/g, " ")
     .replace(
@@ -142,7 +166,13 @@ function normalizeScheduleTextForModel(text: string): string {
     )
     .replace(/(Week\s*\d{1,2})\s*(?=\d{1,2}\s*[-/])/gi, "$1\n")
     .replace(/(?<!\n)(Week\s*\d{1,2}\b)/gi, "\n$1")
-    .replace(/\s{2,}/g, " ")
+    .replace(
+      /((?:\d{1,2}\s*[-/]\s*(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec)[a-z]*|(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec)[a-z]*\s*\d{1,2}(?:\s*,\s*\d{4})?))(?=\s+(?:\d{1,2}\s*[-/]\s*(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec)|(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec)\s*\d{1,2}\b))/gi,
+      "$1\n"
+    )
+    .replace(/[ \t]{2,}/g, " ")
+    .replace(/\n[ \t]+/g, "\n")
+    .replace(/[ \t]+\n/g, "\n")
     .replace(/\n{3,}/g, "\n\n")
     .trim();
 }
@@ -162,81 +192,224 @@ function findWeekMarkers(text: string): Array<{ week: number; index: number }> {
   return markers;
 }
 
-function getExactWeekBlock(scheduleText: string, currentWeek: number): string {
+function getBestWeekBlock(scheduleText: string, currentWeek: number): { text: string; exactWeekMatch: boolean } {
   const normalized = normalizeScheduleTextForModel(scheduleText);
   const markers = findWeekMarkers(normalized);
+  if (markers.length === 0) {
+    return { text: normalized.slice(0, 12000), exactWeekMatch: false };
+  }
+
   const exactIndex = markers.findIndex((entry) => entry.week === currentWeek);
 
-  if (exactIndex < 0) return "";
+  if (exactIndex >= 0) {
+    const start = markers[exactIndex].index;
+    const end = exactIndex + 1 < markers.length ? markers[exactIndex + 1].index : normalized.length;
+    return { text: normalized.slice(start, end), exactWeekMatch: true };
+  }
 
-  const start = markers[exactIndex].index;
-  const end = exactIndex + 1 < markers.length ? markers[exactIndex + 1].index : normalized.length;
-  return normalized.slice(start, end);
+  const nearestIndex = markers.reduce((best, entry, idx) => {
+    const bestDistance = Math.abs(markers[best].week - currentWeek);
+    const currentDistance = Math.abs(entry.week - currentWeek);
+    return currentDistance < bestDistance ? idx : best;
+  }, 0);
+
+  const start = Math.max(0, markers[nearestIndex].index - 120);
+  const end =
+    nearestIndex + 1 < markers.length
+      ? Math.min(normalized.length, markers[nearestIndex + 1].index + 120)
+      : Math.min(normalized.length, markers[nearestIndex].index + 1800);
+
+  return { text: normalized.slice(start, end), exactWeekMatch: false };
 }
 
 function cleanSegmentText(segment: string): string {
-  return segment
+  const withoutAppendix = segment
+    .split(/\b(?:Section\s+Number|Section\s+Title|MyLab\s+Homework\s+Due\s+Date|Homework\s+Due\s+Date|Course\s+Policies|Grading\s+Policy)\b/i)[0] ?? "";
+
+  return withoutAppendix
     .replace(/\bweek\s*\d+\b/gi, " ")
     .replace(/\s+/g, " ")
     .trim();
 }
 
 function extractSectionLikeTokens(segment: string): string[] {
-  const matches = segment.match(/\b\d+(?:\.\d+)?(?:\s*[-–&]\s*\d+(?:\.\d+)?)*\b/g);
+  const matches = segment.match(/\b\d+\.\d+(?:\s*(?:[-–&]|and|,)\s*\d+\.\d+)*\b/gi);
   return (matches ?? []).map((value) => value.trim());
 }
 
-function extractNotes(segment: string): string | undefined {
-  const phraseMatches = segment.match(/\b(?:no\s+quiz|no\s+class|holiday|mlk\s+day|exam|midterm|final|review)\b[^.,;]*/gi);
-  if (!phraseMatches || phraseMatches.length === 0) return undefined;
-  return phraseMatches.join("; ").trim();
+function extractKeywordCell(segment: string, kind: "lecture" | "discussion" | "lab" | "quiz" | "homework" | "exam"): string | undefined {
+  const regexByKind: Record<typeof kind, RegExp> = {
+    lecture: /(?:lecture|topic|reading)\s*[:\-]?\s*([^|;,.]+)/i,
+    discussion: /(?:discussion|recitation)\s*[:\-]?\s*([^|;,.]+)/i,
+    lab: /(?:lab|laboratory|studio)\s*[:\-]?\s*([^|;,.]+)/i,
+    quiz: /(?:quiz|checkpoint)\s*[:\-]?\s*([^|;,.]+)/i,
+    homework: /(?:homework|assignment|project|lab|problem\s*set|pset|due)\s*[:\-]?\s*([^|;,.]+)/i,
+    exam: /(?:exam|midterm|final)\s*[:\-]?\s*([^|;,.]+)/i,
+  };
+
+  const match = segment.match(regexByKind[kind]);
+  if (!match) return undefined;
+  return match[1]?.trim() || kind;
 }
 
-export function extractWeekRows(scheduleText: string, currentWeek: number): WeekRawRow[] {
-  const weekBlock = getExactWeekBlock(scheduleText, currentWeek);
+function extractNotes(segment: string): string | undefined {
+  const phraseMatches = segment.match(
+    /\b(?:no\s+quiz|no\s+class|holiday|mlk\s+day|exam|midterm|final|review|deadline|due|submit|submission|spring\s+break)\b[^\n.;]*/gi
+  );
+  if (!phraseMatches || phraseMatches.length === 0) return undefined;
+  return phraseMatches.join("; ").slice(0, 180).trim();
+}
+
+type DateMatch = {
+  start: number;
+  end: number;
+  dateToken: string;
+  dateISO: string;
+};
+
+function findDateMatches(text: string): DateMatch[] {
+  const matches: DateMatch[] = [];
+  const patterns: Array<{ regex: RegExp; tokenBuilder: (match: RegExpExecArray) => string | null }> = [
+    {
+      regex: /(\d{1,2})\s*[-/]\s*(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec)[a-z]*/gi,
+      tokenBuilder: (match) => `${match[1]} ${match[2]}`,
+    },
+    {
+      regex: /(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec)[a-z]*\s*(\d{1,2})(?:\s*,\s*(\d{4}))?/gi,
+      tokenBuilder: (match) => `${match[1]} ${match[2]}${match[3] ? ` ${match[3]}` : ""}`,
+    },
+    {
+      regex: /\b(\d{4}[\/-]\d{1,2}[\/-]\d{1,2})\b/g,
+      tokenBuilder: (match) => match[1],
+    },
+    {
+      regex: /\b(\d{1,2}[\/-]\d{1,2}(?:[\/-]\d{2,4})?)\b/g,
+      tokenBuilder: (match) => match[1],
+    },
+  ];
+
+  for (const entry of patterns) {
+    let match: RegExpExecArray | null;
+    while ((match = entry.regex.exec(text)) !== null) {
+      const token = entry.tokenBuilder(match);
+      if (!token) continue;
+
+      const normalizedDate = normalizeDateString(token);
+      if (!normalizedDate) continue;
+
+      matches.push({
+        start: match.index,
+        end: match.index + match[0].length,
+        dateToken: token,
+        dateISO: normalizedDate.iso,
+      });
+    }
+  }
+
+  const seen = new Set<string>();
+  return matches
+    .sort((a, b) => a.start - b.start)
+    .filter((entry) => {
+      const key = `${entry.start}-${entry.dateISO}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+}
+
+export function extractWeekRows(
+  scheduleText: string,
+  currentWeek: number,
+  dateRange?: { weekStartISO: string; weekEndISO: string }
+): WeekRawRow[] {
+  const weekBlock = getBestWeekBlock(scheduleText, currentWeek).text;
   if (!weekBlock) return [];
 
-  const dateRegex = /(\d{1,2})\s*[-/]\s*(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec)[a-z]*/gi;
-  const dateMatches = Array.from(weekBlock.matchAll(dateRegex));
+  const dateMatches = findDateMatches(weekBlock);
   if (dateMatches.length === 0) return [];
 
   const rows: WeekRawRow[] = [];
 
   for (let index = 0; index < dateMatches.length; index++) {
     const match = dateMatches[index];
-    const tokenStart = (match.index ?? 0) + match[0].length;
+    const tokenStart = match.end;
     const tokenEnd =
       index + 1 < dateMatches.length
-        ? (dateMatches[index + 1].index ?? weekBlock.length)
+        ? dateMatches[index + 1].start
         : weekBlock.length;
-
-    const dateToken = `${match[1]}-${match[2]}`;
-    const normalizedDate = normalizeDateString(dateToken);
-    if (!normalizedDate) continue;
 
     const segment = cleanSegmentText(weekBlock.slice(tokenStart, tokenEnd));
     const sectionLike = extractSectionLikeTokens(segment);
     const notes = extractNotes(segment);
 
     const row: WeekRawRow = {
-      dateISO: normalizedDate.iso,
-      dateToken,
+      dateISO: match.dateISO,
+      dateToken: match.dateToken,
       notes,
     };
+
+    const lectureFromKeyword = extractKeywordCell(segment, "lecture");
+    const discussionFromKeyword = extractKeywordCell(segment, "discussion");
+    const labFromKeyword = extractKeywordCell(segment, "lab");
+    const quizFromKeyword = extractKeywordCell(segment, "quiz");
+    const homeworkFromKeyword = extractKeywordCell(segment, "homework");
+    const examFromKeyword = extractKeywordCell(segment, "exam");
 
     if (/\bno\s+quiz\b/i.test(segment)) {
       row.quizCell = "No Quiz";
     }
 
-    if (sectionLike.length > 0) row.lectureCell = sectionLike[0];
-    if (sectionLike.length > 1) row.discussionCell = sectionLike[1];
-    if (sectionLike.length > 2 && !row.quizCell) row.quizCell = sectionLike[2];
-    if (sectionLike.length > 3) row.sectionCell = sectionLike[3];
+    if (/\b(?:spring\s+break|no\s+class|holiday|mlk\s+day)\b/i.test(segment)) {
+      row.notes = [row.notes, "No class"].filter(Boolean).join("; ");
+    }
+
+    row.lectureCell = lectureFromKeyword ?? sectionLike[0];
+    row.discussionCell = discussionFromKeyword ?? sectionLike[1];
+    row.labCell = labFromKeyword;
+    row.quizCell = row.quizCell ?? quizFromKeyword ?? (row.quizCell ? undefined : sectionLike[2]);
+
+    // Keep homework/exam hints in sectionCell so fallback normalization can surface them.
+    row.sectionCell = examFromKeyword ?? homeworkFromKeyword ?? sectionLike[3];
 
     rows.push(row);
   }
 
-  return rows;
+  const deduped = new Map<string, WeekRawRow>();
+  for (const row of rows) {
+    const existing = deduped.get(row.dateISO);
+    if (!existing) {
+      deduped.set(row.dateISO, row);
+      continue;
+    }
+
+    deduped.set(row.dateISO, {
+      ...existing,
+      lectureCell: existing.lectureCell ?? row.lectureCell,
+      discussionCell: existing.discussionCell ?? row.discussionCell,
+      labCell: existing.labCell ?? row.labCell,
+      quizCell: existing.quizCell ?? row.quizCell,
+      sectionCell: existing.sectionCell ?? row.sectionCell,
+      notes: [existing.notes, row.notes].filter(Boolean).join("; ") || undefined,
+    });
+  }
+
+  const sorted = Array.from(deduped.values()).sort((a, b) => a.dateISO.localeCompare(b.dateISO));
+
+  if (!dateRange) return sorted;
+
+  const start = new Date(`${dateRange.weekStartISO}T00:00:00Z`).getTime();
+  const end = new Date(`${dateRange.weekEndISO}T23:59:59Z`).getTime();
+
+  const filtered = sorted.filter((row) => {
+    const time = new Date(`${row.dateISO}T00:00:00Z`).getTime();
+    return Number.isFinite(time) && time >= start && time <= end;
+  });
+
+  return filtered.length > 0 ? filtered : sorted;
+}
+
+function getWeekFocusedRawText(scheduleText: string, currentWeek: number): string {
+  return getBestWeekBlock(scheduleText, currentWeek).text.slice(0, 4000);
 }
 
 function extractSyllabusHints(syllabusText: string | null): string {
@@ -282,8 +455,14 @@ function compactPrimary(value: string): string {
   if (!cleaned) return "No items";
 
   const words = cleaned.split(" ");
-  if (words.length <= 6) return cleaned;
-  return words.slice(0, 6).join(" ");
+  if (words.length <= 10) return cleaned;
+  return words.slice(0, 10).join(" ");
+}
+
+function isGenericPrimary(primary: string): boolean {
+  const normalized = primary.trim().toLowerCase();
+  if (!normalized) return true;
+  return /^(no items|review|catch up|class|lecture|discussion|lab|work)$/.test(normalized);
 }
 
 function parseJsonObject(text: string): Record<string, unknown> | null {
@@ -346,23 +525,65 @@ function normalizeDays(params: {
     const row = byDate.get(dateISO);
 
     let primary = fromModel?.primary ?? "No items";
+    const secondary: string[] = [];
+    const tagSet = new Set<string>(fromModel?.tags ?? []);
+
+    const rowSignals: string[] = [];
+    if (row?.lectureCell) {
+      rowSignals.push(`Lecture: ${row.lectureCell}`);
+      tagSet.add("lecture");
+    }
+    if (row?.discussionCell) {
+      rowSignals.push(`Discussion: ${row.discussionCell}`);
+      tagSet.add("discussion");
+    }
+    if (row?.labCell) {
+      rowSignals.push(`Lab: ${row.labCell}`);
+      tagSet.add("lab");
+    }
+    if (row?.quizCell && !/no\s+quiz/i.test(row.quizCell)) {
+      rowSignals.push(`Quiz: ${row.quizCell}`);
+      tagSet.add("quiz");
+    }
+    if (row?.sectionCell && /exam|midterm|final/i.test(row.sectionCell)) {
+      rowSignals.push(`Exam: ${row.sectionCell}`);
+      tagSet.add("exam");
+    }
+    if (row?.sectionCell && /homework|assignment|project|lab|due|submit/i.test(row.sectionCell)) {
+      rowSignals.push(`Homework: ${row.sectionCell}`);
+      tagSet.add("homework");
+    }
+    if (row?.notes && !/no\s+class/i.test(row.notes)) {
+      rowSignals.push(row.notes);
+    }
+
     if (!fromModel && row) {
       if (row.notes && /no\s+class|holiday|mlk\s+day/i.test(row.notes)) {
         primary = "No class";
-      } else if (row.quizCell && !/no\s+quiz/i.test(row.quizCell)) {
-        primary = `Quiz: ${row.quizCell}`;
-      } else if (row.lectureCell) {
-        primary = `Lecture: ${row.lectureCell}`;
-      } else if (row.discussionCell) {
-        primary = `Discussion: ${row.discussionCell}`;
+        tagSet.add("no-class");
+      } else if (rowSignals.length > 0) {
+        primary = rowSignals[0];
       }
     }
+
+    if (fromModel && rowSignals.length > 0) {
+      if (isGenericPrimary(fromModel.primary) || /^no\s*items$/i.test(fromModel.primary)) {
+        primary = rowSignals[0];
+      }
+      for (const signal of rowSignals) {
+        if (signal.toLowerCase() === primary.toLowerCase()) continue;
+        secondary.push(signal);
+      }
+    }
+
+    const dedupedSecondary = Array.from(new Set(secondary.map((value) => value.trim()).filter(Boolean)));
 
     days.push({
       dateISO,
       dow: toDow(dateISO),
       primary: compactPrimary(primary),
-      tags: fromModel?.tags,
+      secondary: dedupedSecondary.length > 0 ? dedupedSecondary.slice(0, 3).map(compactPrimary) : undefined,
+      tags: tagSet.size > 0 ? Array.from(tagSet) : undefined,
       source: "ai",
     });
   }
@@ -400,15 +621,31 @@ function normalizeUpcoming(params: {
     return items.slice(0, 3);
   }
 
-  const derived = params.days
-    .filter((day) => day.primary.toLowerCase() !== "no items")
-    .map((day) => ({
-      title: day.primary,
-      dueDateISO: day.dateISO,
-      dueDowLabel: formatDueDowLabel(day.dateISO, params.weekStartISO, params.weekEndISO),
-    }));
+  const derived: WeekScheduleUpcoming[] = [];
+  for (const day of params.days) {
+    const candidates = [day.primary, ...(day.secondary ?? [])]
+      .map((value) => value.trim())
+      .filter(Boolean)
+      .filter((value) => !/^no items$/i.test(value));
 
-  return [...items, ...derived].slice(0, 3);
+    const dueLike = candidates.filter((value) => /quiz|exam|midterm|final|homework|assignment|project|lab|due|submit/i.test(value));
+    const source = dueLike.length > 0 ? dueLike : candidates;
+
+    for (const title of source) {
+      if (/^no class$/i.test(title)) continue;
+      derived.push({
+        title: compactPrimary(title),
+        dueDateISO: day.dateISO,
+        dueDowLabel: formatDueDowLabel(day.dateISO, params.weekStartISO, params.weekEndISO),
+      });
+    }
+  }
+
+  const dedupedDerived = Array.from(
+    new Map(derived.map((item) => [`${item.dueDateISO}-${item.title.toLowerCase()}`, item])).values()
+  );
+
+  return [...items, ...dedupedDerived].slice(0, 3);
 }
 
 async function generateWeekScheduleFromStructuredInput(params: {
@@ -416,6 +653,7 @@ async function generateWeekScheduleFromStructuredInput(params: {
   weekStartISO: string;
   weekEndISO: string;
   weekRows: WeekRawRow[];
+  weekRawText: string;
   syllabusHints: string;
   modelName: string;
 }) {
@@ -447,6 +685,9 @@ RULES:
 
 weekRows JSON:
 ${JSON.stringify(params.weekRows)}
+
+weekRawText snippet:
+${params.weekRawText || "(none)"}
 
 syllabusHints:
 ${params.syllabusHints || "(none)"}
@@ -661,7 +902,8 @@ export async function getOrCreateWeekScheduleForClass(params: {
   const termStart = resolveTermStart(anchorDate, currentWeek);
   const { weekStartISO, weekEndISO } = computeWeekStartEnd(week, termStart);
 
-  const weekRows = extractWeekRows(resolved.scheduleText, week);
+  const weekRows = extractWeekRows(resolved.scheduleText, week, { weekStartISO, weekEndISO });
+  const weekRawText = getWeekFocusedRawText(resolved.scheduleText, week);
   const modelName = resolveGroqModel();
 
   const { days, upcoming } = await generateWeekScheduleFromStructuredInput({
@@ -669,6 +911,7 @@ export async function getOrCreateWeekScheduleForClass(params: {
     weekStartISO,
     weekEndISO,
     weekRows,
+    weekRawText,
     syllabusHints,
     modelName,
   });
