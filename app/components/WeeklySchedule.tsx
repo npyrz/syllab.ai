@@ -75,6 +75,18 @@ export default function WeeklySchedule({
               <div className="text-[13px] font-medium leading-relaxed text-[color:var(--app-text)]">
                 {formatEventText(day.primary)}
               </div>
+              {day.secondary && day.secondary.length > 0 ? (
+                <div className="mt-2 space-y-1">
+                  {day.secondary.slice(0, 2).map((item, idx) => (
+                    <div
+                      key={`${day.dateISO}-secondary-${idx}`}
+                      className="text-[11px] leading-relaxed text-[color:var(--app-subtle)]"
+                    >
+                      {formatEventText(item)}
+                    </div>
+                  ))}
+                </div>
+              ) : null}
             </div>
           ))}
         </div>

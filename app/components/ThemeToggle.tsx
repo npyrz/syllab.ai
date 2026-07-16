@@ -20,31 +20,27 @@ type ThemeToggleProps = {
   initialTheme: ThemeMode | null;
 };
 
+function resolveInitialTheme(initialTheme: ThemeMode | null): ThemeMode {
+  if (initialTheme) return initialTheme;
+
+  if (typeof window === "undefined") return "dark";
+
+  const stored = getStoredTheme();
+  if (stored) return stored;
+
+  return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+}
+
 export default function ThemeToggle({ initialTheme }: ThemeToggleProps) {
-  const [theme, setTheme] = useState<ThemeMode>(initialTheme ?? "dark");
+  const [theme, setTheme] = useState<ThemeMode>(() => resolveInitialTheme(initialTheme));
+  const effectiveTheme = initialTheme ?? theme;
 
   useEffect(() => {
-    if (initialTheme) {
-      applyTheme(initialTheme);
-      setTheme(initialTheme);
-      return;
-    }
-
-    const stored = getStoredTheme();
-    if (stored) {
-      setTheme(stored);
-      applyTheme(stored);
-      return;
-    }
-
-    const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
-    const nextTheme: ThemeMode = prefersDark ? "dark" : "light";
-    setTheme(nextTheme);
-    applyTheme(nextTheme);
-  }, [initialTheme]);
+    applyTheme(effectiveTheme);
+  }, [effectiveTheme]);
 
   const toggleTheme = () => {
-    const nextTheme: ThemeMode = theme === "dark" ? "light" : "dark";
+    const nextTheme: ThemeMode = effectiveTheme === "dark" ? "light" : "dark";
     setTheme(nextTheme);
     applyTheme(nextTheme);
     void updateUserThemeAction(nextTheme);
@@ -55,10 +51,10 @@ export default function ThemeToggle({ initialTheme }: ThemeToggleProps) {
       type="button"
       onClick={toggleTheme}
       className="inline-flex items-center gap-2 rounded-full border border-transparent bg-[color:var(--app-chip)] px-3 py-1.5 text-xs font-semibold text-[color:var(--app-text)] ring-1 ring-[color:var(--app-border)] transition hover:bg-[color:var(--app-elevated)]"
-      aria-label={`Switch to ${theme === "dark" ? "light" : "dark"} mode`}
+      aria-label={`Switch to ${effectiveTheme === "dark" ? "light" : "dark"} mode`}
     >
       <span className="h-2 w-2 rounded-full bg-cyan-300" />
-      {theme === "dark" ? "Dark" : "Light"}
+      {effectiveTheme === "dark" ? "Dark" : "Light"}
     </button>
   );
 }

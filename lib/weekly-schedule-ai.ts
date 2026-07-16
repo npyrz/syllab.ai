@@ -91,7 +91,12 @@ function cleanModelEventText(event: string): string {
 
 function isSectionOnlyEvent(value: string): boolean {
   const compact = value.trim();
-  return /^(?:ch\.?\s*)?\d+(?:\.\d+)?(?:\s*[-–&]\s*\d+(?:\.\d+)?)*$/i.test(compact);
+  if (!/^(?:ch\.?\s*)?\d+(?:\.\d+)?(?:\s*[-–&]\s*\d+(?:\.\d+)?)*$/i.test(compact)) {
+    return false;
+  }
+
+  // Avoid interpreting bare integers like week numbers as section-only events.
+  return /^ch\.?/i.test(compact) || compact.includes(".");
 }
 
 export function isLowSignalSchedule(entries: ScheduleEntry[]): boolean {
@@ -327,6 +332,15 @@ function getGroqModelCandidates(): string[] {
   );
 }
 
+function truncateLikelyAppendixSections(text: string): string {
+  const headingRegex =
+    /(?:^|\n)\s*(Section\s+Number|Section\s+Title|MyLab\s+Homework\s+Due\s+Date|Homework\s+Due\s+Date|Course\s+Policies|Grading\s+Policy|Office\s+Hours)\b/gi;
+  const match = headingRegex.exec(text);
+  if (!match || typeof match.index !== "number") return text;
+  if (match.index < 120) return text;
+  return text.slice(0, match.index).trim();
+}
+
 async function runGroqExtractionAttempt(params: {
   modelName: string;
   classId: string;
@@ -369,7 +383,9 @@ async function runGroqExtractionAttempt(params: {
 }
 
 function normalizeScheduleTextForModel(text: string) {
-  return text
+  const trimmed = truncateLikelyAppendixSections(text);
+
+  return trimmed
     .replace(/\r/g, "\n")
     .replace(/\u00a0/g, " ")
     .replace(
@@ -378,7 +394,13 @@ function normalizeScheduleTextForModel(text: string) {
     )
     .replace(/(Week\s*\d{1,2})\s*(?=\d{1,2}\s*[-/])/gi, "$1\n")
     .replace(/(?<!\n)(Week\s*\d{1,2}\b)/gi, "\n$1")
-    .replace(/\s{2,}/g, " ")
+    .replace(
+      /((?:\d{1,2}\s*[-/]\s*(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec)[a-z]*|(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec)[a-z]*\s*\d{1,2}(?:\s*,\s*\d{4})?))(?=\s+(?:\d{1,2}\s*[-/]\s*(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec)|(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec)\s*\d{1,2}\b))/gi,
+      "$1\n"
+    )
+    .replace(/[ \t]{2,}/g, " ")
+    .replace(/\n[ \t]+/g, "\n")
+    .replace(/[ \t]+\n/g, "\n")
     .replace(/\n{3,}/g, "\n\n")
     .trim();
 }
@@ -424,6 +446,67 @@ function getWeekFocusedScheduleText(text: string, currentWeek: number) {
   return normalized.slice(start, end).slice(0, 18000);
 }
 
+function fallbackExtractEntriesFromWeekText(weekText: string): ScheduleEntry[] {
+  const normalized = normalizeScheduleTextForModel(weekText);
+  const dateRegex = /(\d{1,2})\s*[-/]\s*(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec)[a-z]*|(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec)[a-z]*\s*(\d{1,2})/gi;
+  const matches = Array.from(normalized.matchAll(dateRegex));
+  if (matches.length === 0) return [];
+
+  const entries: ScheduleEntry[] = [];
+
+  for (let index = 0; index < matches.length; index++) {
+    const match = matches[index];
+    const matchText = match[0] ?? "";
+    const normalizedDate = normalizeDateString(matchText.replace(/\s+/g, " "));
+    if (!normalizedDate) continue;
+
+    const segmentStart = (match.index ?? 0) + matchText.length;
+    const segmentEnd =
+      index + 1 < matches.length
+        ? (matches[index + 1].index ?? normalized.length)
+        : normalized.length;
+
+    const segment = normalized
+      .slice(segmentStart, segmentEnd)
+      .split(/\b(?:Section\s+Number|Section\s+Title|MyLab\s+Homework\s+Due\s+Date|Homework\s+Due\s+Date|Course\s+Policies|Grading\s+Policy)\b/i)[0]
+      .replace(/\bweek\s*\d+\b/gi, " ")
+      .replace(/[ \t]{2,}/g, " ")
+      .replace(/\n[ \t]+/g, "\n")
+      .replace(/[ \t]+\n/g, "\n")
+      .trim();
+
+    if (!segment) continue;
+
+    const rawParts = segment
+      .split(/\s*[|;]\s*|\n+/)
+      .map((part) => part.trim())
+      .filter(Boolean);
+
+    const heuristics = [
+      segment.match(/(?:lecture|topic|reading)\s*[:\-]?\s*([^|;,.]+)/i)?.[1],
+      segment.match(/(?:discussion|recitation)\s*[:\-]?\s*([^|;,.]+)/i)?.[1],
+      segment.match(/(?:quiz|checkpoint)\s*[:\-]?\s*([^|;,.]+)/i)?.[1],
+      segment.match(/(?:exam|midterm|final)\s*[:\-]?\s*([^|;,.]+)/i)?.[1],
+      segment.match(/(?:homework|assignment|project|lab|due|submit)\s*[:\-]?\s*([^|;,.]+)/i)?.[1],
+    ].filter((item): item is string => !!item && item.trim().length > 1);
+
+    const events = Array.from(new Set([...heuristics, ...rawParts]))
+      .map((value) => normalizeEventLabel(value))
+      .filter((value) => value.length > 2)
+      .slice(0, 5);
+
+    if (events.length === 0) continue;
+
+    entries.push({
+      date: normalizedDate.iso,
+      dateLabel: normalizedDate.label,
+      events,
+    });
+  }
+
+  return deduplicateScheduleEntries(entries);
+}
+
 export async function generateWeeklyScheduleSummary(params: {
   classId?: string;
   scheduleText: string;
@@ -435,12 +518,8 @@ export async function generateWeeklyScheduleSummary(params: {
   if (!scheduleText.trim()) return [];
   
   const normalizedScheduleText = normalizeScheduleTextForModel(scheduleText);
-  const weekMarkers = findWeekMarkers(normalizedScheduleText);
-  const hasExactWeek = weekMarkers.some((entry) => entry.week === currentWeek);
   const weekFocusedScheduleText = getWeekFocusedScheduleText(scheduleText, currentWeek);
-  const promptSourceText = hasExactWeek
-    ? weekFocusedScheduleText
-    : `${weekFocusedScheduleText}\n\nFull schedule fallback context:\n${normalizedScheduleText.slice(0, 6000)}`;
+  const promptSourceText = weekFocusedScheduleText;
 
   const compactSyllabus = (syllabusContext ?? "").slice(0, 5000);
   const syllabusHints = extractSyllabusHints(syllabusContext);
@@ -482,29 +561,14 @@ ${syllabusHints || "(none)"}
 
 Return ONLY the JSON array.`;
 
-  const compactPrompt = `Target week: ${currentWeek}
-
-Extract only this week's schedule from the text below.
-Output schema: [{"date":"Month DD","events":["..."]}]
-Rules: compact event text, keep Lecture/Discussion/Quiz/Exam/Homework labels when inferable, no dates in events, no markdown.
-
-Detected activity hints:
-${columnHints.length > 0 ? columnHints.join(", ") : "(none)"}
-
-Text:
-${weekFocusedScheduleText}
-
-Return only JSON array.`;
-
   console.log('[WeeklyScheduleAI] input analysis', {
     classId,
     week: currentWeek,
     scheduleTextLength: scheduleText.length,
     normalizedLength: normalizedScheduleText.length,
     weekFocusedLength: weekFocusedScheduleText.length,
-    hasExactWeek,
     syllabusContextLength: syllabusContext?.length ?? 0,
-    weekMarkersPreview: weekMarkers.slice(0, 12).map((entry) => entry.week),
+    weekMarkersPreview: findWeekMarkers(normalizedScheduleText).slice(0, 12).map((entry) => entry.week),
     scheduleTextPreview: scheduleText.slice(0, 200),
     normalizedPreview: normalizedScheduleText.slice(0, 200),
     weekFocusedPreview: weekFocusedScheduleText.slice(0, 200),
@@ -512,58 +576,33 @@ Return only JSON array.`;
   });
 
   try {
-    console.log('[WeeklyScheduleAI] attempting groq extraction sequence');
-
-    const models = getGroqModelCandidates();
-    let bestNonEmpty: ScheduleEntry[] = [];
-
-    for (const modelName of models) {
-      const strictAttempt = await runGroqExtractionAttempt({
-        modelName,
-        classId,
-        currentWeek,
-        prompt: strictPrompt,
-      });
-
-      if (strictAttempt.usable) {
-        return deduplicateScheduleEntries(strictAttempt.parsed).sort((a, b) => a.date.localeCompare(b.date));
-      }
-
-      if (strictAttempt.parsed.length > bestNonEmpty.length) {
-        bestNonEmpty = strictAttempt.parsed;
-      }
-
-      const compactAttempt = await runGroqExtractionAttempt({
-        modelName,
-        classId,
-        currentWeek,
-        prompt: compactPrompt,
-      });
-
-      if (compactAttempt.usable) {
-        return deduplicateScheduleEntries(compactAttempt.parsed).sort((a, b) => a.date.localeCompare(b.date));
-      }
-
-      if (compactAttempt.parsed.length > bestNonEmpty.length) {
-        bestNonEmpty = compactAttempt.parsed;
-      }
-    }
-
-    if (bestNonEmpty.length > 0) {
-      console.log('[WeeklyScheduleAI] returning best non-empty groq output', {
-        classId,
-        week: currentWeek,
-        parsedCount: bestNonEmpty.length,
-      });
-      return deduplicateScheduleEntries(bestNonEmpty).sort((a, b) => a.date.localeCompare(b.date));
-    }
-
-    console.error('[WeeklyScheduleAI] all groq attempts returned empty output', {
+    const modelName = getGroqModelCandidates()[0] ?? "llama-3.3-70b-versatile";
+    console.log('[WeeklyScheduleAI] attempting single groq extraction', {
       classId,
       week: currentWeek,
-      modelCandidates: models,
+      model: modelName,
     });
-    return [];
+
+    const strictAttempt = await runGroqExtractionAttempt({
+      modelName,
+      classId,
+      currentWeek,
+      prompt: strictPrompt,
+    });
+
+    if (strictAttempt.parsed.length > 0) {
+      return deduplicateScheduleEntries(strictAttempt.parsed).sort((a, b) => a.date.localeCompare(b.date));
+    }
+
+    const fallback = fallbackExtractEntriesFromWeekText(weekFocusedScheduleText);
+    if (fallback.length > 0) {
+      console.log('[WeeklyScheduleAI] using deterministic fallback extraction', {
+        classId,
+        week: currentWeek,
+        parsedCount: fallback.length,
+      });
+    }
+    return fallback;
   } catch (err) {
     console.error('[WeeklyScheduleAI] error generating week items', {
       classId,
@@ -572,7 +611,7 @@ Return only JSON array.`;
       stack: err instanceof Error ? err.stack : undefined,
     });
     console.error('[WeeklyScheduleAI] full error:', err);
-    return [];
+    return fallbackExtractEntriesFromWeekText(weekFocusedScheduleText);
   }
 }
 

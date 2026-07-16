@@ -4,6 +4,7 @@ import Credentials from "next-auth/providers/credentials";
 
 import { prisma } from "@/lib/prisma";
 import { verifyPassword } from "@/lib/password";
+import { syncUserClassWeeksIfNeeded } from "@/lib/week-rollover";
 
 const googleConfigured =
 	!!process.env.AUTH_GOOGLE_ID && !!process.env.AUTH_GOOGLE_SECRET;
@@ -89,6 +90,16 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
 				let dbUser = await prisma.user.findUnique({ where: { email } });
 
 				if (dbUser) {
+					const previousLoginAt = dbUser.lastLoginAt;
+					const previousSeenAt = dbUser.lastSeenAt;
+
+					await syncUserClassWeeksIfNeeded({
+						userId: dbUser.id,
+						now,
+						previousLoginAt,
+						previousSeenAt,
+					});
+
 					// Update existing user
 					dbUser = await prisma.user.update({
 						where: { email },
